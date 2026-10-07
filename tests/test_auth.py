@@ -254,7 +254,7 @@ def test_expert_activates_the_account_from_the_email(raw, client):
     assert _login(raw, address).status_code == 200
 
     welcome = [m for m in _mails_to(address) if "actif" in m["Subject"]]
-    assert len(welcome) == 1 and "confirmee" in _body(welcome[0])
+    assert len(welcome) == 1 and "confirmée" in _body(welcome[0])
 
     # the link works once only
     assert raw.post(f"{API}/auth/activate", json={"token": token, "password": PASSWORD}).status_code == 404

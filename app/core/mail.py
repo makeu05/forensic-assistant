@@ -14,7 +14,7 @@ import smtplib
 import time
 import uuid
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import formataddr, parseaddr
 from pathlib import Path
 
 log = logging.getLogger("mail")
@@ -89,17 +89,52 @@ def check_connection() -> str:
     return f"Connected to {cfg['host']}:{cfg['port']}" + (f" and logged in as {cfg['user']}" if cfg["user"] else "")
 
 
+# Reserved names (RFC 2606 / 6761) that can never receive mail. Sending to them only creates bounces,
+# which damage the sender's reputation with the provider, so they are never sent for real.
+UNDELIVERABLE_TLDS = {"example", "test", "invalid", "localhost", "local"}
+UNDELIVERABLE_DOMAINS = {"example.com", "example.org", "example.net"}
+
+
+def _domain(address: str) -> str:
+    return parseaddr(address)[1].rsplit("@", 1)[-1].strip().lower()
+
+
+def hold_reason(address: str) -> str | None:
+    """Why this address must not receive real mail, or None if it may. Held mail goes to the local outbox.
+
+    1. Reserved, undeliverable domains (experts.example, anything.test, example.com...) are always held.
+    2. If SMTP_ALLOWED is set (comma-separated addresses or domains, e.g. "me@gmail.com, mydomain.fr"),
+       only matching recipients are sent for real.
+    """
+    domain = _domain(address)
+    if not domain or "." not in domain and domain not in UNDELIVERABLE_TLDS:
+        return "the address is not valid"
+    if domain in UNDELIVERABLE_DOMAINS or domain.rsplit(".", 1)[-1] in UNDELIVERABLE_TLDS:
+        return f"{domain} is a reserved domain that cannot receive mail"
+    allowed = [a.strip().lower().lstrip("@") for a in os.getenv("SMTP_ALLOWED", "").split(",") if a.strip()]
+    if allowed and not any(parseaddr(address)[1].lower() == a or domain == a or domain.endswith("." + a) for a in allowed):
+        return "the address is not in SMTP_ALLOWED"
+    return None
+
+
+def _to_outbox(msg: EmailMessage) -> str:
+    folder = outbox_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    # nanosecond clock first, so a directory listing is in sending order
+    path = folder / f"{time.time_ns()}_{uuid.uuid4().hex[:6]}.eml"
+    path.write_bytes(bytes(msg))
+    return str(path)
+
+
 def deliver(to: str, subject: str, body: str) -> str:
     """Send one message and let any error propagate. Returns "smtp" or the path of the .eml written."""
     msg = build_message(to, subject, body)
     cfg = smtp_settings()
     if not cfg["configured"]:
-        folder = outbox_dir()
-        folder.mkdir(parents=True, exist_ok=True)
-        # nanosecond clock first, so a directory listing is in sending order
-        path = folder / f"{time.time_ns()}_{uuid.uuid4().hex[:6]}.eml"
-        path.write_bytes(bytes(msg))
-        return str(path)
+        return _to_outbox(msg)
+    if (reason := hold_reason(to)) is not None:
+        log.info("Mail to %s held in the outbox: %s", to, reason)
+        return _to_outbox(msg)
     if not cfg["sender"]:
         raise MailConfigError("SMTP_FROM is required when SMTP_HOST is set (use a sender verified with your provider).")
     for attempt in range(1, ATTEMPTS + 1):
@@ -131,21 +166,21 @@ def send_email(to: str, subject: str, body: str) -> str:
 # ---------------------------------------------------------------- message texts (French)
 
 def invitation_mail(name: str, case_type: str, priority: str, link: str) -> tuple[str, str]:
-    return ("Locard : invitation a rejoindre la plateforme", (
+    return ("Locard : invitation à rejoindre la plateforme", (
         f"Bonjour {name},\n\n"
-        "Un mandataire vous a sollicite(e) pour une mission d'investigation numerique sur Locard "
-        f"(type : {case_type}, priorite : {priority}).\n\n"
-        "Pour consulter la demande et y repondre, creez votre compte avec ce lien personnel. "
+        "Un mandataire vous a sollicité(e) pour une mission d'investigation numérique sur Locard "
+        f"(type : {case_type}, priorité : {priority}).\n\n"
+        "Pour consulter la demande et y répondre, créez votre compte avec ce lien personnel. "
         "Il est valable 7 jours et ne peut servir qu'une seule fois :\n\n"
         f"{link}\n\n"
-        "Si vous n'etes pas concerne(e), ignorez simplement ce message : aucun compte ne sera cree.\n\n"
+        "Si vous n'êtes pas concerné(e), ignorez simplement ce message : aucun compte ne sera créé.\n\n"
         "Locard\n"))
 
 
 def request_mail(name: str, case_type: str, priority: str) -> tuple[str, str]:
     return ("Locard : nouvelle demande de mission", (
         f"Bonjour {name},\n\n"
-        f"Vous avez recu une nouvelle demande de mission (type : {case_type}, priorite : {priority}).\n"
+        f"Vous avez reçu une nouvelle demande de mission (type : {case_type}, priorité : {priority}).\n"
         f"Connectez-vous pour l'accepter ou la refuser : {base_url()}\n\n"
         "Locard\n"))
 
@@ -153,15 +188,15 @@ def request_mail(name: str, case_type: str, priority: str) -> tuple[str, str]:
 def welcome_mail(name: str, email: str) -> tuple[str, str]:
     return ("Locard : votre compte est actif", (
         f"Bonjour {name},\n\n"
-        "Votre inscription sur Locard est confirmee. "
+        "Votre inscription sur Locard est confirmée. "
         f"Vous pouvez vous connecter avec l'adresse {email} : {base_url()}\n\n"
-        "Si vous n'etes pas a l'origine de cette inscription, contactez immediatement l'administrateur.\n\n"
+        "Si vous n'êtes pas à l'origine de cette inscription, contactez immédiatement l'administrateur.\n\n"
         "Locard\n"))
 
 
 def test_mail() -> tuple[str, str]:
     return ("Locard : message de test", (
         "Bonjour,\n\n"
-        "Ceci est un message de test envoye par Locard pour verifier que l'envoi d'e-mails fonctionne.\n"
-        "Il ne contient aucune donnee de dossier. Vous pouvez l'ignorer.\n\n"
+        "Ceci est un message de test envoyé par Locard pour vérifier que l'envoi d'e-mails fonctionne.\n"
+        "Il ne contient aucune donnée de dossier. Vous pouvez l'ignorer.\n\n"
         "Locard\n"))

@@ -20,7 +20,7 @@ import sys
 
 from sqlalchemy import select
 
-from app.core.mail import check_connection, deliver, smtp_settings, test_mail
+from app.core.mail import check_connection, deliver, hold_reason, smtp_settings, test_mail
 from app.db import Base, SessionLocal, engine, ensure_columns
 from app.modules.auth import invitations  # noqa: F401  (registers the invitations table)
 from app.modules.auth.service import ROLES, create_user, get_user_by_email
@@ -88,7 +88,8 @@ def send_test(args: argparse.Namespace) -> int:
     if result == "smtp":
         print(f"Sent to {args.to} through {os.environ['SMTP_HOST']}.")
     else:
-        print(f"SMTP_HOST is not set, so nothing was sent. The message was written to {result}.")
+        why = "SMTP_HOST is not set" if not smtp_settings()["configured"] else (hold_reason(args.to) or "held")
+        print(f"Nothing was sent ({why}). The message was written to {result}.")
     return 0
 
 
