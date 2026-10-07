@@ -41,10 +41,14 @@ http.interceptors.response.use(undefined, async (error: AxiosError) => {
   return Promise.reject(error);
 });
 
-/** Download a protected file: a plain link cannot carry the Authorization header, so fetch it as a blob. */
-export async function downloadFile(url: string, filename: string): Promise<void> {
+/** A protected file as a Blob. A plain link cannot carry the Authorization header, so files are fetched. */
+export async function fetchFile(url: string): Promise<Blob> {
   const response = await http.get<Blob>(url.replace(/^\/api\/v1/, ""), { responseType: "blob" });
-  const href = URL.createObjectURL(response.data);
+  return response.data;
+}
+
+export async function downloadFile(url: string, filename: string): Promise<void> {
+  const href = URL.createObjectURL(await fetchFile(url));
   const link = document.createElement("a");
   link.href = href;
   link.download = filename;
@@ -52,9 +56,20 @@ export async function downloadFile(url: string, filename: string): Promise<void>
   URL.revokeObjectURL(href);
 }
 
+// ------------------------------------------------------------------ types
+
 export type CaseType = "fraude_bancaire" | "intrusion_reseau" | "malware";
 export type Priority = "basse" | "moyenne" | "haute";
 export type CaseStatus = "en_attente" | "en_cours" | "termine";
+export type SolStatus = "pending" | "accepted" | "refused" | "chosen";
+export type StageKey = "mandat" | "experts" | "contrat" | "preparation" | "analyse" | "rapport";
+
+export interface Stage {
+  key: StageKey;
+  label: string;
+  done: boolean;
+  current: boolean;
+}
 
 export interface CaseData {
   case_id: string;
@@ -66,14 +81,29 @@ export interface CaseData {
   mandataire: { nom: string; fonction: string };
   chosen_expert_id: number | null;
   signed: boolean;
+  stages: Stage[];
+  progress: number;
+  last_activity: string;
+  solicitations: { total: number; pending: number; accepted: number; refused: number };
+}
+
+export interface NewCase {
+  case_type: CaseType;
+  description: string;
+  priority: Priority;
+  mandataire: { nom: string; fonction: string };
 }
 
 export interface Expert {
   id: number;
   nom: string;
   competences: string[];
+  bio: string;
+  annees_experience: number;
+  disponibilite: boolean;
   score: number;
   justification: string;
+  weights: { text: number; dispo: number; exp: number };
   breakdown: { text_score: number; dispo_score: number; exp_score: number };
 }
 
@@ -83,9 +113,19 @@ export interface Solicitation {
   expert_id: number;
   expert_nom: string | null;
   expert_competences: string[];
-  status: "pending" | "accepted" | "refused" | "chosen";
+  status: SolStatus;
   reason: string | null;
   responded_at: string | null;
+}
+
+export interface Request {
+  id: number;
+  case_id: string;
+  expert_id: number;
+  status: SolStatus;
+  reason: string | null;
+  responded_at: string | null;
+  case: { case_id: string; case_type: CaseType; priority: Priority; description: string; created_at: string };
 }
 
 export interface Contract {
@@ -95,26 +135,11 @@ export interface Contract {
   generated_at: string;
 }
 
-export interface Request {
-  id: number;
-  case_id: string;
-  expert_id: number;
-  status: "pending" | "accepted" | "refused" | "chosen";
-  reason: string | null;
-  responded_at: string | null;
-  case: { case_id: string; case_type: CaseType; priority: Priority; description: string; created_at: string };
-}
-
-export interface Invitation {
-  expert_name: string;
-  email: string;
-}
-
-export interface NewCase {
-  case_type: CaseType;
-  description: string;
-  priority: Priority;
-  mandataire: { nom: string; fonction: string };
+export interface MissionPrep {
+  questions: string[];
+  suggested_witnesses: string[];
+  checklist: string[];
+  guide_pdf_url: string;
 }
 
 export interface Entities {
@@ -127,12 +152,23 @@ export interface Entities {
   heures: string[];
 }
 
+export type IncoherenceType = "temporelle" | "geographique" | "factuelle";
+export type Severity = "haute" | "moyenne" | "basse";
+
 export interface Incoherence {
-  type: "temporelle" | "geographique" | "factuelle";
-  severity: "haute" | "moyenne" | "basse";
+  type: IncoherenceType;
+  severity: Severity;
   description: string;
+  rule: string;
+  why: string;
   pv_references: string[];
   evidence: { pv_id: string; excerpt: string }[];
+}
+
+export type EntityLabel = "personne" | "lieu" | "date" | "montant" | "heure";
+export interface Segment {
+  text: string;
+  label: EntityLabel | null;
 }
 
 export interface PvAnalysis {
@@ -143,6 +179,26 @@ export interface PvAnalysis {
   sha256: string;
   analyzed_at: string;
   duration_ms: number;
+}
+
+export interface PvDetail {
+  pv_id: string;
+  witness_name: string;
+  sha256: string;
+  verified: boolean;
+  analyzed_at: string;
+  entities: Entities;
+  incoherences: Incoherence[];
+  score_coherence: number;
+  word_count: number;
+  segments: Segment[];
+}
+
+export interface PvListItem {
+  pv_id: string;
+  witness_name: string;
+  sha256: string;
+  analyzed_at: string;
 }
 
 export interface PvReport {
@@ -166,54 +222,145 @@ export interface Mission {
   last_pv_at: string | null;
 }
 
-export interface MissionPrep {
-  questions: string[];
-  suggested_witnesses: string[];
-  checklist: string[];
-  guide_pdf_url: string;
+export interface Hypothesis {
+  id: string;
+  label: string;
+  actions: string[];
+  origin: "type_dossier" | "incoherence";
+  basis: string;
+  pv_references: string[];
 }
 
-export const INCOHERENCE_LABEL: Record<Incoherence["type"], string> = {
-  temporelle: "Temporelle",
-  geographique: "Geographique",
-  factuelle: "Factuelle",
-};
-
-export const CASE_TYPE_LABEL: Record<CaseType, string> = {
-  fraude_bancaire: "Fraude bancaire",
-  intrusion_reseau: "Intrusion reseau",
-  malware: "Malware",
-};
-
-export const STATUS_LABEL: Record<CaseStatus, string> = {
-  en_attente: "En attente",
-  en_cours: "En cours",
-  termine: "Termine",
-};
-
-/** Readable message from an axios error (FastAPI returns {detail}). */
-export function errorMessage(e: unknown): string {
-  if (axios.isAxiosError(e)) {
-    const d = e.response?.data?.detail;
-    if (typeof d === "string") return d;
-    if (Array.isArray(d)) return d.map((x) => x.msg).join(", ");
-    return e.message;
-  }
-  return "Erreur inconnue";
+export interface PlanStep {
+  priority: number;
+  action: string;
+  label: string;
+  outils: string[];
+  description: string;
+  duree_min: number;
+  duree_max: number;
+  duree_estimee: string;
+  justified_by: string[];
+  why: string;
 }
+
+export interface Methodology {
+  case_id: string;
+  hypotheses: Hypothesis[];
+  plan: PlanStep[];
+  duree_totale_min: number;
+  duree_totale_max: number;
+  duree_totale_estimee: string;
+}
+
+export interface TechReportIn {
+  rapport_id: string;
+  action: string;
+  outils: string[];
+  resultats: string;
+  preuves: string[];
+}
+
+export interface TechReportScored extends TechReportIn {
+  score: number;
+  rank: number;
+  in_chain: boolean;
+  breakdown: { completude: number; pertinence: number; preuves: number };
+  weights: { completude: number; pertinence: number; preuves: number };
+  details: { champs_manquants: string[]; concepts_trouves: string[]; concepts_absents: string[]; nb_preuves: number };
+}
+
+export interface ReportsAnalysis {
+  case_id: string;
+  rapports: TechReportScored[];
+  chaine_optimale: { rapport_id: string; action: string; score: number; preuves_cles: string[] }[];
+  score_global: number | null;
+  recommandations: string[];
+  actions_connues: Record<string, string>;
+}
+
+export interface OutlineSection {
+  key: string;
+  title: string;
+  points: string[];
+}
+
+export interface FinalReport {
+  report_id: string;
+  case_id: string;
+  version: number;
+  sha256: string;
+  generated_at: string;
+  generated_by: string;
+  pseudonymized: boolean;
+  pdf_url: string;
+  outline: OutlineSection[];
+}
+
+export interface AuditEntry {
+  id: number;
+  timestamp: string;
+  module: string;
+  action: string;
+  case_id: string | null;
+  user: string | null;
+  payload: Record<string, unknown>;
+  file: string | null;
+  hash: string | null;
+  entry_hash: string;
+  prev_hash: string;
+}
+
+export interface AuditPage {
+  case_id: string;
+  total: number;
+  modules: string[];
+  logs: AuditEntry[];
+}
+
+export interface AuditFilters {
+  module?: string;
+  actor?: string;
+  action?: string;
+  order?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
+}
+
+export interface Invitation {
+  expert_name: string;
+  email: string;
+}
+
+// -------------------------------------------------------------------- calls
 
 export const api = {
-  listCases: () => http.get<{ total: number; cases: CaseData[] }>("/cases?limit=50").then((r) => r.data),
+  // auth
+  login: (email: string, password: string) => http.post<Session>("/auth/login", { email, password }).then((r) => r.data),
+  register: (email: string, display_name: string, password: string) =>
+    http.post<Session>("/auth/register", { email, display_name, password }).then((r) => r.data),
+  invitation: (token: string) => http.get<Invitation>("/auth/invitation", { params: { token } }).then((r) => r.data),
+  activate: (token: string, password: string, display_name?: string) =>
+    http.post<Session>("/auth/activate", { token, password, display_name }).then((r) => r.data),
+  logout: (refresh_token: string) => http.post("/auth/logout", { refresh_token }),
+
+  // cases (A) and experts (B)
+  listCases: () => http.get<{ total: number; cases: CaseData[] }>("/cases?limit=50").then((r) => r.data.cases),
   getCase: (id: string) => http.get<CaseData>(`/cases/${id}`).then((r) => r.data),
   createCase: (body: NewCase) => http.post<{ case_id: string }>("/cases", body).then((r) => r.data),
   experts: (id: string) => http.get<{ experts: Expert[] }>(`/cases/${id}/experts`).then((r) => r.data.experts),
+  sign: (id: string, signatory_name: string) => http.post(`/cases/${id}/sign`, { signatory_name }),
+
+  // acceptance workflow (D)
   solicit: (case_id: string, expert_ids: number[]) => http.post("/solicitations", { case_id, expert_ids }),
   solicitations: (id: string) =>
     http.get<{ solicitations: Solicitation[] }>(`/solicitations?case_id=${id}`).then((r) => r.data.solicitations),
+  myRequests: () => http.get<{ solicitations: Request[] }>("/solicitations/mine").then((r) => r.data.solicitations),
   respond: (sid: number, status: "accepted" | "refused", reason?: string) =>
     http.put(`/solicitations/${sid}/respond`, { status, reason }),
   select: (case_id: string, expert_id: number) => http.post("/solicitations/select", { case_id, expert_id }),
-  sign: (id: string, signatory_name: string) => http.post(`/cases/${id}/sign`, { signatory_name }),
+
+  // contract (C)
   generateContract: (case_id: string) => http.post<Contract>("/contracts/generate", { case_id }).then((r) => r.data),
   contract: (case_id: string) =>
     http
@@ -223,18 +370,36 @@ export const api = {
         if (axios.isAxiosError(e) && e.response?.status === 404) return null;
         throw e;
       }),
+
+  // mission preparation (E)
+  prepareMission: (body: { case_id: string; questions?: string[]; suggested_witnesses?: string[]; checklist?: string[] }) =>
+    http.post<MissionPrep>("/mission/prepare", body).then((r) => r.data),
+
+  // PV analysis (F)
   missions: () => http.get<{ total: number; missions: Mission[] }>("/pv/missions").then((r) => r.data.missions),
-  myRequests: () => http.get<{ solicitations: Request[] }>("/solicitations/mine").then((r) => r.data.solicitations),
-  login: (email: string, password: string) => http.post<Session>("/auth/login", { email, password }).then((r) => r.data),
-  register: (email: string, display_name: string, password: string) =>
-    http.post<Session>("/auth/register", { email, display_name, password }).then((r) => r.data),
-  invitation: (token: string) => http.get<Invitation>("/auth/invitation", { params: { token } }).then((r) => r.data),
-  activate: (token: string, password: string, display_name?: string) =>
-    http.post<Session>("/auth/activate", { token, password, display_name }).then((r) => r.data),
-  logout: (refresh_token: string) => http.post("/auth/logout", { refresh_token }),
-  prepareMission: (case_id: string) => http.post<MissionPrep>("/mission/prepare", { case_id }).then((r) => r.data),
   analyzePv: (body: { case_id: string; pv_id: string; pv_text: string; witness_name: string; pseudonymize: boolean }) =>
     http.post<PvAnalysis>("/pv/analyze", body).then((r) => r.data),
+  listPvs: (case_id: string) => http.get<{ pvs: PvListItem[] }>("/pv", { params: { case_id } }).then((r) => r.data.pvs),
+  pvDetail: (case_id: string, pv_id: string, pseudonymize: boolean) =>
+    http.get<PvDetail>(`/pv/${pv_id}`, { params: { case_id, pseudonymize } }).then((r) => r.data),
   pvReport: (case_id: string, pseudonymize: boolean) =>
     http.get<PvReport>("/pv/report", { params: { case_id, pseudonymize } }).then((r) => r.data),
+
+  // methodology (G), technical reports (H), final report (I)
+  methodology: (case_id: string) => http.get<Methodology>("/methodology", { params: { case_id } }).then((r) => r.data),
+  analyzeReports: (case_id: string, rapports: TechReportIn[]) =>
+    http.post<ReportsAnalysis>("/reports/analyze", { case_id, rapports }).then((r) => r.data),
+  reportsAnalysis: (case_id: string) =>
+    http.get<ReportsAnalysis>("/reports/analysis", { params: { case_id } }).then((r) => r.data),
+  deleteTechReport: (case_id: string, rapport_id: string) => http.delete(`/reports/${rapport_id}`, { params: { case_id } }),
+  generateReport: (body: { case_id: string; conclusion: string; pseudonymize: boolean }) =>
+    http.post<FinalReport>("/reports/generate", body).then((r) => r.data),
+  finalReports: (case_id: string) =>
+    http.get<{ reports: FinalReport[] }>("/reports", { params: { case_id } }).then((r) => r.data.reports),
+
+  // audit (J)
+  auditLogs: (case_id: string, filters: AuditFilters = {}) =>
+    http.get<AuditPage>("/audit/logs", { params: { case_id, ...filters } }).then((r) => r.data),
+  verifyChain: () =>
+    http.get<{ valid: boolean; entries: number; broken_at: number | null }>("/audit/chain/verify").then((r) => r.data),
 };

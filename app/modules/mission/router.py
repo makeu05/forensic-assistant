@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.latex import LatexError, render_pdf
@@ -51,6 +51,16 @@ def generate_questions(case_type: str) -> dict:
 
 class PrepareIn(BaseModel):
     case_id: str
+    # The investigator may edit the generated lists before exporting the guide; edits go into the PDF.
+    questions: list[str] | None = Field(default=None, max_length=60)
+    suggested_witnesses: list[str] | None = Field(default=None, max_length=30)
+    checklist: list[str] | None = Field(default=None, max_length=40)
+
+
+def _clean(items: list[str] | None) -> list[str] | None:
+    if items is None:
+        return None
+    return [" ".join(i.split())[:300] for i in items if i.strip()]
 
 
 @router.post("/prepare")
@@ -59,6 +69,10 @@ def prepare(body: PrepareIn, user: User = Depends(require_role("investigateur"))
     if case.chosen_expert_id is None:
         raise HTTPException(409, "No expert has been selected for this case")
     result = generate_questions(case.case_type)
+    for key in ("questions", "suggested_witnesses", "checklist"):
+        edited = _clean(getattr(body, key))
+        if edited is not None:
+            result[key] = edited
     try:
         pdf = render_pdf("guide.tex.j2", {"case_id": case.id, "case_type": case.case_type, **result},
                          output_dir() / "guides" / case.id, "guide")

@@ -87,6 +87,7 @@ def lifecycle(db: Session, c: Case) -> dict:
     from app.modules.contracts.router import Contract, output_dir
     from app.modules.pv.router import Pv
     from app.modules.reports.final import FinalReport
+    from app.modules.workflow.router import Solicitation
 
     def exists(model) -> bool:
         return db.scalars(select(model.id).where(model.case_id == c.id).limit(1)).first() is not None
@@ -101,10 +102,14 @@ def lifecycle(db: Session, c: Case) -> dict:
     }
     current = next((k for k, _ in STAGES if not done[k]), None)
     last = db.scalar(select(func.max(AuditLog.timestamp)).where(AuditLog.case_id == c.id))
+    counts = dict(db.execute(select(Solicitation.status, func.count()).where(Solicitation.case_id == c.id)
+                             .group_by(Solicitation.status)).all())
     return {
         "stages": [{"key": k, "label": label, "done": done[k], "current": k == current} for k, label in STAGES],
         "progress": round(sum(done.values()) / len(STAGES), 2),
         "last_activity": last or c.created_at,
+        "solicitations": {"total": sum(counts.values()), "pending": counts.get("pending", 0),
+                          "accepted": counts.get("accepted", 0), "refused": counts.get("refused", 0)},
     }
 
 

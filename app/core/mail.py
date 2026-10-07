@@ -38,26 +38,31 @@ def build_message(to: str, subject: str, body: str) -> EmailMessage:
     return msg
 
 
+def deliver(to: str, subject: str, body: str) -> str:
+    """Send one message and let any error propagate. Returns "smtp" or the path of the .eml written."""
+    msg = build_message(to, subject, body)
+    host = os.getenv("SMTP_HOST")
+    if not host:
+        folder = outbox_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        # nanosecond clock first, so a directory listing is in sending order
+        path = folder / f"{time.time_ns()}_{uuid.uuid4().hex[:6]}.eml"
+        path.write_bytes(bytes(msg))
+        return str(path)
+    with smtplib.SMTP(host, int(os.getenv("SMTP_PORT", "587")), timeout=15) as smtp:
+        if os.getenv("SMTP_STARTTLS", "true").lower() != "false":
+            smtp.starttls()
+        if os.getenv("SMTP_USER"):
+            smtp.login(os.environ["SMTP_USER"], os.getenv("SMTP_PASSWORD", ""))
+        smtp.send_message(msg)
+    return "smtp"
+
+
 def send_email(to: str, subject: str, body: str) -> str:
-    """Send one message. Returns "smtp" or the path of the .eml file written. Never raises:
-    a mail failure must not break the request that triggered it, so it is logged instead."""
+    """deliver() for use inside requests: a mail failure must not break the request that triggered it,
+    so it is logged and "failed" is returned instead of raising."""
     try:
-        msg = build_message(to, subject, body)
-        host = os.getenv("SMTP_HOST")
-        if not host:
-            folder = outbox_dir()
-            folder.mkdir(parents=True, exist_ok=True)
-            # nanosecond clock first, so a directory listing is in sending order
-            path = folder / f"{time.time_ns()}_{uuid.uuid4().hex[:6]}.eml"
-            path.write_bytes(bytes(msg))
-            return str(path)
-        with smtplib.SMTP(host, int(os.getenv("SMTP_PORT", "587")), timeout=15) as smtp:
-            if os.getenv("SMTP_STARTTLS", "true").lower() != "false":
-                smtp.starttls()
-            if os.getenv("SMTP_USER"):
-                smtp.login(os.environ["SMTP_USER"], os.getenv("SMTP_PASSWORD", ""))
-            smtp.send_message(msg)
-        return "smtp"
+        return deliver(to, subject, body)
     except Exception:  # noqa: BLE001 - deliberately broad, see docstring
         log.exception("Could not send email to %s", to)
         return "failed"
@@ -91,4 +96,12 @@ def welcome_mail(name: str, email: str) -> tuple[str, str]:
         "Votre inscription sur Locard est confirmee. "
         f"Vous pouvez vous connecter avec l'adresse {email} : {base_url()}\n\n"
         "Si vous n'etes pas a l'origine de cette inscription, contactez immediatement l'administrateur.\n\n"
+        "Locard\n"))
+
+
+def test_mail() -> tuple[str, str]:
+    return ("Locard : message de test", (
+        "Bonjour,\n\n"
+        "Ceci est un message de test envoye par Locard pour verifier que l'envoi d'e-mails fonctionne.\n"
+        "Il ne contient aucune donnee de dossier. Vous pouvez l'ignorer.\n\n"
         "Locard\n"))

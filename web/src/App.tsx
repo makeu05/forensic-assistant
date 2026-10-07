@@ -1,70 +1,57 @@
-import { useState } from "react";
-import { AppBar, Box, Container, Toolbar, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
-import Dashboard from "./components/Dashboard";
-import CaseForm from "./components/CaseForm";
-import CaseDetail from "./components/CaseDetail";
-import InvestigatorDashboard from "./components/InvestigatorDashboard";
-import MissionDetail from "./components/MissionDetail";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { Box, Button, Typography } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
+import { RequireAuth, RequireRole } from "./auth";
+import AppShell from "./layout/AppShell";
+import AuditPage from "./pages/AuditPage";
+import { ActivatePage, LoginPage } from "./pages/AuthPages";
+import AnalysisStep from "./pages/case/AnalysisStep";
+import CaseLayout from "./pages/case/CaseLayout";
+import ContractStep from "./pages/case/ContractStep";
+import ExpertsStep from "./pages/case/ExpertsStep";
+import MandateStep from "./pages/case/MandateStep";
+import PreparationStep from "./pages/case/PreparationStep";
+import ReportStep from "./pages/case/ReportStep";
+import Home from "./pages/Home";
+import NewMandate from "./pages/NewMandate";
+import OptionsPage from "./pages/OptionsPage";
+import RequestsPage from "./pages/Requests";
+import StyleGuide from "./pages/StyleGuide";
 
-type Role = "mandataire" | "investigateur";
-type View = { name: "dashboard" } | { name: "new" } | { name: "case"; id: string };
-
-const ROLE_LABEL: Record<Role, string> = { mandataire: "Mandataire", investigateur: "Investigateur" };
+function NotFound() {
+  return (
+    <Box sx={{ textAlign: "center", py: 10 }}>
+      <Typography variant="h1" component="h1" sx={{ mb: 1 }}>Page introuvable</Typography>
+      <Typography color="text.secondary" sx={{ mb: 3 }}>L'adresse demandée n'existe pas ou a changé.</Typography>
+      <Button variant="contained" component={RouterLink} to="/">Retour à l'accueil</Button>
+    </Box>
+  );
+}
 
 export default function App() {
-  // No authentication yet (JWT is planned): the role switch stands in for it.
-  const [role, setRole] = useState<Role>("mandataire");
-  const [view, setView] = useState<View>({ name: "dashboard" });
-  const home = () => setView({ name: "dashboard" });
-
   return (
-    <Box>
-      <AppBar position="static" elevation={0}>
-        <Toolbar sx={{ gap: 2, flexWrap: "wrap" }}>
-          <Typography variant="h6" sx={{ fontWeight: 800, cursor: "pointer" }} onClick={home}>
-            Locard
-          </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.8, flexGrow: 1 }}>
-            Espace {ROLE_LABEL[role].toLowerCase()}
-          </Typography>
-          <ToggleButtonGroup
-            exclusive size="small" value={role} aria-label="Role"
-            onChange={(_, next: Role | null) => {
-              if (next) {
-                setRole(next);
-                home();
-              }
-            }}
-            sx={{ bgcolor: "rgba(255,255,255,0.12)", "& .MuiToggleButton-root": { color: "white", px: 2 },
-              "& .Mui-selected": { bgcolor: "rgba(255,255,255,0.3) !important" } }}
-          >
-            <ToggleButton value="mandataire">Mandataire</ToggleButton>
-            <ToggleButton value="investigateur">Investigateur</ToggleButton>
-          </ToggleButtonGroup>
-        </Toolbar>
-      </AppBar>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        {role === "mandataire" && (
-          <>
-            {view.name === "dashboard" && (
-              <Dashboard onNew={() => setView({ name: "new" })} onOpen={(id) => setView({ name: "case", id })} />
-            )}
-            {view.name === "new" && (
-              <CaseForm onCancel={home} onCreated={(id) => setView({ name: "case", id })} />
-            )}
-            {view.name === "case" && <CaseDetail id={view.id} onBack={home} />}
-          </>
-        )}
-        {role === "investigateur" && (
-          <>
-            {view.name === "case" ? (
-              <MissionDetail id={view.id} onBack={home} />
-            ) : (
-              <InvestigatorDashboard onOpen={(id) => setView({ name: "case", id })} />
-            )}
-          </>
-        )}
-      </Container>
-    </Box>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/activate" element={<ActivatePage />} />
+      <Route path="/style-guide" element={<StyleGuide />} />
+      <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+        <Route index element={<Home />} />
+        <Route path="cases/new" element={<RequireRole role="mandataire"><NewMandate /></RequireRole>} />
+        <Route path="cases/:id" element={<CaseLayout />}>
+          <Route path="mandat" element={<MandateStep />} />
+          <Route path="experts" element={<ExpertsStep />} />
+          <Route path="contrat" element={<ContractStep />} />
+          <Route path="preparation" element={<PreparationStep />} />
+          <Route path="analyse" element={<AnalysisStep />} />
+          <Route path="rapport" element={<ReportStep />} />
+          <Route path="audit" element={<AuditPage />} />
+          <Route path="*" element={<Navigate to="mandat" replace />} />
+        </Route>
+        <Route path="demandes" element={<RequireRole role="investigateur"><RequestsPage /></RequireRole>} />
+        <Route path="audit" element={<AuditPage />} />
+        <Route path="options" element={<OptionsPage />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
   );
 }

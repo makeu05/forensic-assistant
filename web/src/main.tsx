@@ -1,22 +1,25 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
+import { BrowserRouter } from "react-router-dom";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/jetbrains-mono/400.css";
 import App from "./App";
-
-const theme = createTheme({
-  palette: {
-    primary: { main: "#14377B" },
-    secondary: { main: "#2E86C8" },
-    background: { default: "#F7F7FB" },
-  },
-  typography: { fontFamily: "Montserrat, Helvetica, Arial, sans-serif" },
-});
+import { AuthProvider } from "./auth";
+import { SettingsProvider } from "./settings";
+import { ToastProvider } from "./components/ui/Toast";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <App />
-    </ThemeProvider>
+    <SettingsProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </AuthProvider>
+      </ToastProvider>
+    </SettingsProvider>
   </StrictMode>,
 );

@@ -3,16 +3,24 @@
     python -m app.cli create-user --email you@example.com --name "Your Name" --role mandataire
     python -m app.cli create-user --email a@b.c --name "A B" --role investigateur --expert-id 12
     python -m app.cli list-experts --search dubois
+    python -m app.cli send-test-mail --to someone@example.com
+
+send-test-mail uses the SMTP_* environment variables (see app/core/mail.py). Without SMTP_HOST it only
+writes the message to the local outbox. Typical Gmail setup, typed in your own terminal (never in a file):
+    $env:SMTP_HOST="smtp.gmail.com"; $env:SMTP_PORT="587"; $env:SMTP_USER="you@gmail.com"
+    $env:SMTP_PASSWORD="<16-character app password>"; $env:SMTP_FROM="you@gmail.com"
 
 The password is asked on the terminal (never passed as an argument, so it stays out of shell history).
 Investigators normally join through the invitation email; this is for administrators.
 """
 import argparse
 import getpass
+import os
 import sys
 
 from sqlalchemy import select
 
+from app.core.mail import deliver, test_mail
 from app.db import Base, SessionLocal, engine, ensure_columns
 from app.modules.auth import invitations  # noqa: F401  (registers the invitations table)
 from app.modules.auth.service import ROLES, create_user, get_user_by_email
@@ -54,6 +62,20 @@ def list_experts(args: argparse.Namespace) -> int:
     return 0
 
 
+def send_test(args: argparse.Namespace) -> int:
+    subject, body = test_mail()
+    try:
+        result = deliver(args.to, subject, body)
+    except Exception as e:  # noqa: BLE001 - the point of this command is to show the reason
+        print(f"Sending failed: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    if result == "smtp":
+        print(f"Sent to {args.to} through {os.environ['SMTP_HOST']}.")
+    else:
+        print(f"SMTP_HOST is not set, so nothing was sent. The message was written to {result}.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -66,6 +88,9 @@ def main() -> int:
     ls = sub.add_parser("list-experts")
     ls.add_argument("--search")
     ls.set_defaults(run=list_experts)
+    t = sub.add_parser("send-test-mail")
+    t.add_argument("--to", required=True)
+    t.set_defaults(run=send_test)
     args = parser.parse_args()
     return args.run(args)
 

@@ -133,3 +133,18 @@ Rules from the user's organization brand guideline that apply to any document pr
 - Ask before risky or outward-facing actions (killing processes, pushing, creating remote repos, large downloads, deleting files). Never delete files.
 - Do not paste real personal data, credentials or secrets into prompts or files. All data here is synthetic.
 - Answer in the user's language style (English with French domain terms is fine). Keep UI text in French.
+
+
+## 10. Update 2026-10-07 (second session): auth, mail, G/H/I, redesign
+
+State at the end of this session: 76 backend tests, 91% coverage, web build clean, end-to-end browser run passes.
+
+- **Name**: the app is called **Locard**.
+- **Auth**: JWT (access 1 h, refresh 7 d, rotation with reuse detection), bcrypt, 2 roles (`mandataire`, `investigateur`), lockout after 5 failures, every route except `/health` and `/auth/*` needs a token. A mandataire sees only their cases (`cases.owner_id`), an investigator only cases where their expert profile is solicited or chosen; inaccessible cases answer 404. Audit entries carry the real user. `JWT_SECRET` env var (32+ chars); if unset a random one is used and sessions end on restart.
+- **Expert accounts**: created from an invitation e-mail (single-use link, 7 days, token stored hashed) sent when a mandataire solicits an expert with no account. Admin CLI: `python -m app.cli create-user | list-experts | send-test-mail`.
+- **Mail**: `app/core/mail.py`. Without `SMTP_HOST` mail is only written to `OUTPUT_DIR/outbox/*.eml` (quoted-printable, decode before reading). Real sending needs SMTP_HOST/PORT/USER/PASSWORD/FROM typed by the user in their own shell. Outbound port 25 is blocked on this machine, so direct delivery to Gmail is not possible; Gmail SMTP on 587 works with an app password. Nothing has been sent to a real address.
+- **New modules**: G `GET /methodology`, H `POST /reports/analyze` + `GET /reports/analysis`, I `POST /reports/generate` (LaTeX, versions, SHA-256), PV detail with highlight segments, audit filters, case lifecycle (`stages`, `progress`, `last_activity`, solicitation counts).
+- **Front end**: full redesign from the user's brief (MUI v5, tokens in `web/src/theme`, 9 components in `web/src/components/ui`, screens in `web/src/pages`, style guide at `/style-guide`). Old components moved (not deleted) to `web/legacy/`. `vite.config.ts` aliases `@mui/icons-material/*` to the ES build (without it the page is blank with MUI 5 + this Vite). `API_TARGET`/`WEB_PORT` env vars allow a second instance.
+- **Checks**: `node --experimental-strip-types web/scripts/check-contrast.mjs` (WCAG AA over all token pairs, both modes). Brief colours that failed AA as text got text variants (documented in `tokens.ts`). Browser e2e used puppeteer-core + axe-core in a scratch folder (not in the repo).
+- **Dev accounts** were created on `forensic.db`: mandataire@locard.test and alice.dubois0@experts.example (passwords were shown once in chat, not stored anywhere).
+- **Known gaps**: bundle is one 746 kB chunk (route code-splitting not done); PV upload accepts .txt only; no password reset; no Docker/CI yet; `tooltip` popups trigger an axe "region" notice (portal, known false positive); expert suggestions for witnesses are empty (MVP).

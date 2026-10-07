@@ -241,3 +241,30 @@ def test_audit_filters_and_no_absolute_paths(client, fraud_mission):
     assert none["total"] == 0
     with_files = [log for log in only_f["logs"] if log["file"]]
     assert with_files and all(not Path(log["file"]).is_absolute() for log in with_files)
+
+
+@needs_latex
+def test_mission_guide_uses_the_investigators_edits(chosen_case):
+    cid, expert = chosen_case()
+    edited = {"case_id": cid, "questions": ["Question modifiée par l'expert ?", "  "],
+              "suggested_witnesses": ["M. Témoin Test"], "checklist": ["Étape ajoutée"]}
+    r = expert.post(f"{API}/mission/prepare", json=edited)
+    assert r.status_code == 200
+    assert r.json()["questions"] == ["Question modifiée par l'expert ?"]  # blank entries dropped
+    assert r.json()["suggested_witnesses"] == ["M. Témoin Test"]
+    source = (Path(os.environ["OUTPUT_DIR"]) / "guides" / cid / "guide.tex").read_text(encoding="utf-8")
+    assert "Question modifiée par l'expert" in source and "M. Témoin Test" in source
+    assert expert.post(f"{API}/mission/prepare", json={"case_id": cid, "questions": ["x"] * 61}).status_code == 422
+
+
+def test_lifecycle_exposes_solicitation_counts(client, expert_api):
+    cid = client.post(f"{API}/cases", json=DATASET_CASE).json()["case_id"]
+    sols = client.post(f"{API}/solicitations", json={"case_id": cid, "expert_ids": [48, 49]}).json()["solicitations"]
+    expert_api(48).put(f"{API}/solicitations/{sols[0]['id']}/respond", json={"status": "accepted"})
+    expert_api(49).put(f"{API}/solicitations/{sols[1]['id']}/respond", json={"status": "refused", "reason": "indisponible"})
+    got = client.get(f"{API}/cases/{cid}").json()["solicitations"]
+    assert got == {"total": 2, "pending": 0, "accepted": 1, "refused": 1}
+
+
+DATASET_CASE = {"case_type": "malware", "description": "Ransomware sur le serveur de fichiers de la société.",
+                "priority": "moyenne", "mandataire": {"nom": "Dupont", "fonction": "juge_instruction"}}
