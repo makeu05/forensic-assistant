@@ -1,0 +1,69 @@
+{
+  "note": "Synthetic PVs annotated by hand. 'case' groups PVs that are analysed together; 'expect_types' lists the inconsistency types a reviewer would flag for that case.",
+  "pvs": [
+    {
+      "case": "fraude", "pv_id": "fr-1", "witness": "Pierre Lambert",
+      "text": "PROCES-VERBAL D'AUDITION\nDate: 12/10/2025\nCas: C-001\nTémoin: Pierre Lambert\n\nDECLARATION:\nJe m'appelle Pierre Lambert, responsable comptable de la société Alpha à Lyon. J'ai autorisé le virement de 50 000 euros le 10/10/2025 à 14h. Le bénéficiaire était une société basée à Marseille. Mme Sophie Girard m'avait transmis la demande.",
+      "personnes": ["Pierre Lambert", "Sophie Girard"], "lieux": ["Lyon", "Marseille"],
+      "dates": ["2025-10-12", "2025-10-10"], "montants": [50000], "heures": ["14:00"]
+    },
+    {
+      "case": "fraude", "pv_id": "fr-2", "witness": "Claire Morel",
+      "text": "Le compte de la société a été compromis le 05/10/2025 selon la banque. M. Hugo Perrin, du service informatique, a découvert l'intrusion à Paris. Les pertes s'élèvent à 50 000 euros.",
+      "personnes": ["Hugo Perrin"], "lieux": ["Paris"],
+      "dates": ["2025-10-05"], "montants": [50000], "heures": []
+    },
+    {
+      "case": "intrusion", "pv_id": "in-1", "witness": "Marc Leroy",
+      "text": "Le 14 octobre 2025, la session SSH du compte de M. Antoine Bernard est ouverte depuis 192.168.1.50 à 03:42. Environ 2 GB de données ont été exfiltrés. Le serveur se trouve au siège social de Bordeaux.",
+      "personnes": ["Antoine Bernard"], "lieux": ["Bordeaux", "siège social"],
+      "dates": ["2025-10-14"], "montants": [], "heures": ["03:42"]
+    },
+    {
+      "case": "intrusion", "pv_id": "in-2", "witness": "Antoine Bernard",
+      "text": "Je suis en vacances à Paris depuis le 10 octobre 2025. Je n'ai pas accès au réseau de l'entreprise. Ma collègue Julie Moreau peut confirmer que j'ai quitté Bordeaux le 9 octobre.",
+      "personnes": ["Julie Moreau"], "lieux": ["Paris", "Bordeaux"],
+      "dates": ["2025-10-10", "2025-10-09"], "montants": [], "heures": []
+    },
+    {
+      "case": "malware", "pv_id": "ma-1", "witness": "Nadia Fofana",
+      "text": "J'ai cliqué sur la pièce jointe mardi matin. Mon poste s'est mis à chiffrer les fichiers vers 10h30. J'ai prévenu M. Olivier Garnier, le responsable informatique, à Nantes.",
+      "personnes": ["Olivier Garnier"], "lieux": ["Nantes"],
+      "dates": [], "montants": [], "heures": ["10:30"]
+    },
+    {
+      "case": "malware", "pv_id": "ma-2", "witness": "Olivier Garnier",
+      "text": "Selon les journaux du serveur de messagerie, l'e-mail contenant la pièce jointe a été reçu mercredi à 08h12. La rançon demandée est de 15 000 euros en bitcoin. Les sauvegardes du 1er octobre 2025 sont intactes.",
+      "personnes": [], "lieux": [],
+      "dates": ["2025-10-01"], "montants": [15000], "heures": ["08:12"]
+    },
+    {
+      "case": "porte", "pv_id": "po-1", "witness": "Karim Benali",
+      "text": "Le 3 novembre 2025, la porte était fermée à clé quand je suis arrivé. Le technicien Éric Dumas était déjà présent à Lille.",
+      "personnes": ["Éric Dumas"], "lieux": ["Lille"],
+      "dates": ["2025-11-03"], "montants": [], "heures": []
+    },
+    {
+      "case": "porte", "pv_id": "po-2", "witness": "Lucie Faure",
+      "text": "Je suis Lucie Faure, agente de sécurité à Lille. Le 3 novembre 2025, la porte était ouverte quand j'ai fait ma ronde.",
+      "personnes": ["Lucie Faure"], "lieux": ["Lille"],
+      "dates": ["2025-11-03"], "montants": [], "heures": []
+    },
+    {
+      "case": "trajet", "pv_id": "tr-1", "witness": "Thomas Roux",
+      "text": "Le 20 septembre 2025, je suis allé de Paris à Marseille en 1h par la route pour rencontrer Mme Inès Petit. Nous avons discuté d'un paiement de 1 200,50 euros.",
+      "personnes": ["Inès Petit"], "lieux": ["Paris", "Marseille"],
+      "dates": ["2025-09-20"], "montants": [1200.5], "heures": []
+    },
+    {
+      "case": "propre", "pv_id": "pr-1", "witness": "Sarah Cohen",
+      "text": "Le 7 mars 2025, j'ai rencontré M. David Lopez à Toulouse vers 9h. Il m'a remis un chèque de 3 500 euros. Nous avons quitté l'agence à 11h30.",
+      "personnes": ["David Lopez"], "lieux": ["Toulouse", "agence"],
+      "dates": ["2025-03-07"], "montants": [3500], "heures": ["09:00", "11:30"]
+    }
+  ],
+  "expect_types": {
+    "fraude": ["temporelle"], "intrusion": ["geographique"], "malware": ["factuelle"],
+    "porte": ["factuelle"], "trajet": ["geographique"], "propre": []
+  }
+}

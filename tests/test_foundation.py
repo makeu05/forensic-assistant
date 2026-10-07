@@ -56,6 +56,12 @@ def test_file_hash_verify(client, tmp_path):
 def test_chain_detects_tampering(client):
     client.post("/api/v1/cases", json=MANDAT_FRAUDE)
     with SessionLocal() as db:
+        original = db.get(AuditLog, 1).action
         db.execute(update(AuditLog).where(AuditLog.id == 1).values(action="forged"))
         db.commit()
-        assert verify_chain(db)["valid"] is False
+        try:
+            assert verify_chain(db)["valid"] is False
+        finally:  # the DB is shared by the whole test session: leave the chain intact
+            db.execute(update(AuditLog).where(AuditLog.id == 1).values(action=original))
+            db.commit()
+        assert verify_chain(db)["valid"] is True

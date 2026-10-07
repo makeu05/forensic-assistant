@@ -70,6 +70,15 @@ Implemented behavior:
 
 Tests: **14 passed** at last run (`pytest -q`), covering the full A -> B -> D -> sign -> C flow, audit chain tamper detection, state machine, LaTeX escaping, PDF generation, mission guide.
 
+### Module F (PV analysis), added 2026-10-07
+- Files: `app/modules/pv/` (`nlp.py` extraction, `rules.py` inconsistency rules, `router.py` API + `pvs` table). spaCy `fr_core_news_lg` is installed in the venv (about 570 MB) and loaded once at startup.
+- spaCy gives persons and places only (the French model has no DATE/MONEY labels). Dates (numeric, textual, ISO, ranges, "depuis le"), times, amounts, weekdays, titled persons ("M. Dupont" fallback) and event facts come from rules on an accent-folded copy of the text.
+- Endpoints: `POST /pv/analyze` (stores PV file under `output/pv/<case>/`, SHA-256 on receipt, upsert by `pv_id`, logs to J, optional `pseudonymize` flag), `GET /pv?case_id=`, `GET /pv/report?case_id=&pseudonymize=`.
+- Rules compare facts across all PVs of a case: temporelle (action after compromise, sighting during declared absence), geographique (impossible trip by distance/speed table, on-site presence during declared absence abroad), factuelle (opposite states of the same object, attachment opened before it was received).
+- Measured on `tests/data/pv_dataset.json` (10 hand-annotated synthetic PVs, written together with the rules, so treat as a regression check, not a real accuracy claim): NER precision 1.00, recall 1.00 (46 items); every case yields exactly the expected inconsistency type; clean PV yields none; 5000-word PV analysed under 3 s. 28 tests pass, total coverage 94%.
+- Known limits: rules cover patterns, not free reasoning (needs explicit dates or weekdays, named persons, known cities); person matching is by surname; the spec's geographic example (IP + vacation) only fires when the same named person appears in both PVs.
+- Fixed a test-isolation bug: `test_chain_detects_tampering` forged audit entry 1 in the shared session DB and never restored it.
+
 ## 4. Module A front end (written, builds, NOT yet verified in a browser)
 
 `web/` (Vite + React 18 + TypeScript + MUI + axios). Dev proxy: `/api` -> `http://127.0.0.1:8000`, dev port 5173.
@@ -98,7 +107,7 @@ Repo: `C:\Users\belva\Desktop\forensic-assistant`, branch default, author MAKEU0
 
 1. Free port 8000 safely, restart API; fix MUI version; start `npm run dev`; click through the whole flow at http://127.0.0.1:5173 (create mandate, solicit, accept, choose, sign, generate, download PDF). Fix anything found.
 2. Run `pytest`, commit Module A (backend + web) as MAKEU05.
-3. **Module F**: install spaCy and `fr_core_news_lg` (about 570 MB, venv only; ask the user first). Implement NER (persons, places, dates, amounts) and the three inconsistency types, using the spec dataset above. The spec's sample code is a stub (`dates_parsed = [datetime.now()]  # Simulation`), so real date parsing and cross-PV comparison must be written. Target: NER precision >= 80%, recall >= 75%, < 3 s for a 5000-word PV, false positives < 30%.
+3. DONE (see Module F above, backend only; PV upload screen still to build). Original note: install spaCy and `fr_core_news_lg` (about 570 MB, venv only; ask the user first). Implement NER (persons, places, dates, amounts) and the three inconsistency types, using the spec dataset above. The spec's sample code is a stub (`dates_parsed = [datetime.now()]  # Simulation`), so real date parsing and cross-PV comparison must be written. Target: NER precision >= 80%, recall >= 75%, < 3 s for a 5000-word PV, false positives < 30%.
 4. **Module I**: final report PDF compiled from F (and G/H when present), 5+ sections, includes chain-of-custody section and RGPD mention, plus hash logged in J.
 5. Wire audit logging for F and I; add a PV upload screen to the front end and a "final report" step.
 6. Dockerfiles + `docker-compose.yml` (PostgreSQL, API, web). Cannot be tested locally until Docker is installed. Add Alembic migrations (currently `create_all`; changing existing columns in `forensic.db` would need a migration or a fresh DB).

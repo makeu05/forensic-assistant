@@ -10,6 +10,8 @@ from app.modules.contracts.router import router as contracts_router
 from app.modules.matching.router import router as matching_router
 from app.modules.matching.seed import seed_experts
 from app.modules.mission.router import router as mission_router
+from app.modules.pv.nlp import get_nlp
+from app.modules.pv.router import router as pv_router
 from app.modules.workflow.router import router as workflow_router
 
 
@@ -18,6 +20,7 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         seed_experts(db)
+    get_nlp()  # load spaCy once at startup so the first PV request is not slow
     yield
 
 
@@ -31,7 +34,7 @@ def health():
     return {"status": "ok"}
 
 
-for r in (audit_router, cases_router, matching_router, workflow_router, contracts_router, mission_router):
+for r in (audit_router, cases_router, matching_router, workflow_router, contracts_router, mission_router, pv_router):
     api.include_router(r)
 
 app.include_router(api)
