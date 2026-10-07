@@ -1,11 +1,12 @@
 """Outgoing email for Locard.
 
-With SMTP_HOST set, mail goes out over SMTP (STARTTLS on port 587 by default). Without it,
-every message is written as an .eml file under OUTPUT_DIR/outbox, so development and tests
-never send real mail by accident.
+With SMTP_HOST set, mail goes out over SMTP (STARTTLS on port 587 by default), for example through
+Brevo (smtp-relay.brevo.com). Without it, every message is written as an .eml file under
+OUTPUT_DIR/outbox, so development and tests never send real mail by accident.
 
 Environment: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_STARTTLS (true/false),
-APP_BASE_URL (used to build links, default http://localhost:5173).
+APP_BASE_URL (used to build links, default http://localhost:5173). They can live in the git-ignored
+`.env` file (see .env.example).
 """
 import logging
 import os
@@ -38,24 +39,83 @@ def build_message(to: str, subject: str, body: str) -> EmailMessage:
     return msg
 
 
+class MailConfigError(RuntimeError):
+    """The SMTP settings are incomplete or inconsistent."""
+
+
+# Network hiccups worth one retry. Wrong password, refused recipient, etc. are not: retrying cannot fix them.
+TRANSIENT = (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, ConnectionError, TimeoutError)
+ATTEMPTS = 2
+
+
+def smtp_settings() -> dict:
+    """The current SMTP settings, safe to print: the password is never included."""
+    host = os.getenv("SMTP_HOST", "").strip()
+    return {
+        "configured": bool(host), "host": host, "port": int(os.getenv("SMTP_PORT") or "587"),
+        "user": os.getenv("SMTP_USER", ""), "sender": os.getenv("SMTP_FROM", ""),
+        "starttls": os.getenv("SMTP_STARTTLS", "true").lower() != "false",
+        "has_password": bool(os.getenv("SMTP_PASSWORD")),
+    }
+
+
+def _open_smtp() -> smtplib.SMTP:
+    """A connected, TLS-secured, logged-in SMTP session. The caller closes it."""
+    cfg = smtp_settings()
+    if cfg["user"] and not cfg["has_password"]:
+        raise MailConfigError("SMTP_USER is set but SMTP_PASSWORD is empty.")
+    smtp = smtplib.SMTP(cfg["host"], cfg["port"], timeout=15)
+    try:
+        if cfg["starttls"]:
+            smtp.starttls()
+        if cfg["user"]:
+            smtp.login(cfg["user"], os.environ["SMTP_PASSWORD"])
+    except Exception:
+        smtp.close()
+        raise
+    return smtp
+
+
+def check_connection() -> str:
+    """Connect, secure the channel and log in, without sending anything. Raises with the reason on failure."""
+    cfg = smtp_settings()
+    if not cfg["configured"]:
+        raise MailConfigError("SMTP_HOST is not set: mail only goes to the local outbox.")
+    smtp = _open_smtp()
+    try:
+        smtp.noop()
+    finally:
+        smtp.quit()
+    return f"Connected to {cfg['host']}:{cfg['port']}" + (f" and logged in as {cfg['user']}" if cfg["user"] else "")
+
+
 def deliver(to: str, subject: str, body: str) -> str:
     """Send one message and let any error propagate. Returns "smtp" or the path of the .eml written."""
     msg = build_message(to, subject, body)
-    host = os.getenv("SMTP_HOST")
-    if not host:
+    cfg = smtp_settings()
+    if not cfg["configured"]:
         folder = outbox_dir()
         folder.mkdir(parents=True, exist_ok=True)
         # nanosecond clock first, so a directory listing is in sending order
         path = folder / f"{time.time_ns()}_{uuid.uuid4().hex[:6]}.eml"
         path.write_bytes(bytes(msg))
         return str(path)
-    with smtplib.SMTP(host, int(os.getenv("SMTP_PORT", "587")), timeout=15) as smtp:
-        if os.getenv("SMTP_STARTTLS", "true").lower() != "false":
-            smtp.starttls()
-        if os.getenv("SMTP_USER"):
-            smtp.login(os.environ["SMTP_USER"], os.getenv("SMTP_PASSWORD", ""))
-        smtp.send_message(msg)
-    return "smtp"
+    if not cfg["sender"]:
+        raise MailConfigError("SMTP_FROM is required when SMTP_HOST is set (use a sender verified with your provider).")
+    for attempt in range(1, ATTEMPTS + 1):
+        try:
+            smtp = _open_smtp()
+            try:
+                smtp.send_message(msg)
+            finally:
+                smtp.quit()
+            return "smtp"
+        except TRANSIENT as e:
+            if attempt == ATTEMPTS:
+                raise
+            log.warning("Mail attempt %d failed (%s), retrying", attempt, type(e).__name__)
+            time.sleep(attempt)
+    return "smtp"  # unreachable, keeps the type checker content
 
 
 def send_email(to: str, subject: str, body: str) -> str:

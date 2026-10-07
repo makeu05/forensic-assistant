@@ -5,6 +5,7 @@ _tmp = tempfile.mkdtemp()
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
 os.environ["AUDIT_LOG_PATH"] = f"{_tmp}/audit.jsonl"
 os.environ["OUTPUT_DIR"] = f"{_tmp}/output"
+os.environ["LOCARD_NO_DOTENV"] = "1"  # never load a developer's real .env (SMTP credentials!) in tests
 os.environ["JWT_SECRET"] = "test-secret-test-secret-test-secret-0123456789"
 os.environ["BCRYPT_ROUNDS"] = "4"  # production default is 12; 4 keeps the suite fast
 os.environ["APP_BASE_URL"] = "http://locard.test"

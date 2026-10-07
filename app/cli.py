@@ -3,12 +3,12 @@
     python -m app.cli create-user --email you@example.com --name "Your Name" --role mandataire
     python -m app.cli create-user --email a@b.c --name "A B" --role investigateur --expert-id 12
     python -m app.cli list-experts --search dubois
+    python -m app.cli check-mail
     python -m app.cli send-test-mail --to someone@example.com
 
-send-test-mail uses the SMTP_* environment variables (see app/core/mail.py). Without SMTP_HOST it only
-writes the message to the local outbox. Typical Gmail setup, typed in your own terminal (never in a file):
-    $env:SMTP_HOST="smtp.gmail.com"; $env:SMTP_PORT="587"; $env:SMTP_USER="you@gmail.com"
-    $env:SMTP_PASSWORD="<16-character app password>"; $env:SMTP_FROM="you@gmail.com"
+Mail settings come from the environment or the git-ignored `.env` file (copy `.env.example`).
+check-mail tests the connection and login without sending anything; send-test-mail sends one real message.
+Without SMTP_HOST, mail only goes to the local outbox.
 
 The password is asked on the terminal (never passed as an argument, so it stays out of shell history).
 Investigators normally join through the invitation email; this is for administrators.
@@ -20,7 +20,7 @@ import sys
 
 from sqlalchemy import select
 
-from app.core.mail import deliver, test_mail
+from app.core.mail import check_connection, deliver, smtp_settings, test_mail
 from app.db import Base, SessionLocal, engine, ensure_columns
 from app.modules.auth import invitations  # noqa: F401  (registers the invitations table)
 from app.modules.auth.service import ROLES, create_user, get_user_by_email
@@ -62,6 +62,22 @@ def list_experts(args: argparse.Namespace) -> int:
     return 0
 
 
+def check_mail(_: argparse.Namespace) -> int:
+    cfg = smtp_settings()
+    print("Mail settings (the password is never shown):")
+    print(f"  host     : {cfg['host'] or '(not set: mail stays in the local outbox)'}")
+    print(f"  port     : {cfg['port']}   starttls: {cfg['starttls']}")
+    print(f"  login    : {cfg['user'] or '(none)'}   password set: {cfg['has_password']}")
+    print(f"  sender   : {cfg['sender'] or '(not set)'}")
+    try:
+        print(check_connection())
+    except Exception as e:  # noqa: BLE001 - show the reason, that is the point
+        print(f"Check failed: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print("The server accepted the login. Nothing was sent. Next: python -m app.cli send-test-mail --to you@example.com")
+    return 0
+
+
 def send_test(args: argparse.Namespace) -> int:
     subject, body = test_mail()
     try:
@@ -88,6 +104,7 @@ def main() -> int:
     ls = sub.add_parser("list-experts")
     ls.add_argument("--search")
     ls.set_defaults(run=list_experts)
+    sub.add_parser("check-mail").set_defaults(run=check_mail)
     t = sub.add_parser("send-test-mail")
     t.add_argument("--to", required=True)
     t.set_defaults(run=send_test)
