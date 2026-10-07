@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from app.core.latex import LatexError, render_pdf
 from app.db import get_db
 from app.modules.audit.service import log_action
-from app.modules.cases.router import get_case_or_404
+from app.modules.auth.access import case_for
+from app.modules.auth.router import current_user, require_role
+from app.modules.auth.service import User
 from app.modules.contracts.router import output_dir
 
 router = APIRouter(prefix="/mission", tags=["E - Mission"])
@@ -52,8 +54,8 @@ class PrepareIn(BaseModel):
 
 
 @router.post("/prepare")
-def prepare(body: PrepareIn, db: Session = Depends(get_db)):
-    case = get_case_or_404(db, body.case_id)
+def prepare(body: PrepareIn, user: User = Depends(require_role("investigateur")), db: Session = Depends(get_db)):
+    case = case_for(db, body.case_id, user, "mission")
     if case.chosen_expert_id is None:
         raise HTTPException(409, "No expert has been selected for this case")
     result = generate_questions(case.case_type)
@@ -62,13 +64,13 @@ def prepare(body: PrepareIn, db: Session = Depends(get_db)):
                          output_dir() / "guides" / case.id, "guide")
     except LatexError as e:
         raise HTTPException(500, "Guide generation failed") from e
-    log_action(db, "E", "prepare_mission", case_id=case.id, file_path=str(pdf))
+    log_action(db, "E", "prepare_mission", case_id=case.id, user=user.email, file_path=str(pdf))
     return {**result, "guide_pdf_url": f"/api/v1/mission/{case.id}/guide.pdf"}
 
 
 @router.get("/{case_id}/guide.pdf")
-def guide(case_id: str, db: Session = Depends(get_db)):
-    get_case_or_404(db, case_id)
+def guide(case_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    case_for(db, case_id, user, "view")
     pdf = Path(output_dir() / "guides" / case_id / "guide.pdf")
     if not pdf.is_file():
         raise HTTPException(404, "Guide not generated yet")

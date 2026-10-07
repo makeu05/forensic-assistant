@@ -1,6 +1,56 @@
-import axios from "axios";
+import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
+import { getSession, Session, setSession } from "./session";
 
 export const http = axios.create({ baseURL: "/api/v1" });
+
+http.interceptors.request.use((config) => {
+  const session = getSession();
+  if (session) config.headers.Authorization = `Bearer ${session.access_token}`;
+  return config;
+});
+
+// One refresh at a time: several requests failing together must not each spend the single-use refresh token.
+let refreshing: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  const session = getSession();
+  if (!session) return Promise.resolve(false);
+  refreshing ??= axios
+    .post<Session>("/api/v1/auth/refresh", { refresh_token: session.refresh_token })
+    .then((r) => {
+      setSession(r.data);
+      return true;
+    })
+    .catch(() => {
+      setSession(null);
+      return false;
+    })
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
+http.interceptors.response.use(undefined, async (error: AxiosError) => {
+  const config = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+  const isAuthCall = config?.url?.startsWith("/auth/");
+  if (error.response?.status === 401 && config && !config._retried && !isAuthCall && getSession()) {
+    config._retried = true;
+    if (await refreshSession()) return http(config);
+  }
+  return Promise.reject(error);
+});
+
+/** Download a protected file: a plain link cannot carry the Authorization header, so fetch it as a blob. */
+export async function downloadFile(url: string, filename: string): Promise<void> {
+  const response = await http.get<Blob>(url.replace(/^\/api\/v1/, ""), { responseType: "blob" });
+  const href = URL.createObjectURL(response.data);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(href);
+}
 
 export type CaseType = "fraude_bancaire" | "intrusion_reseau" | "malware";
 export type Priority = "basse" | "moyenne" | "haute";
@@ -43,6 +93,21 @@ export interface Contract {
   pdf_url: string;
   hash_sha256: string;
   generated_at: string;
+}
+
+export interface Request {
+  id: number;
+  case_id: string;
+  expert_id: number;
+  status: "pending" | "accepted" | "refused" | "chosen";
+  reason: string | null;
+  responded_at: string | null;
+  case: { case_id: string; case_type: CaseType; priority: Priority; description: string; created_at: string };
+}
+
+export interface Invitation {
+  expert_name: string;
+  email: string;
 }
 
 export interface NewCase {
@@ -158,10 +223,15 @@ export const api = {
         if (axios.isAxiosError(e) && e.response?.status === 404) return null;
         throw e;
       }),
-  missions: (expertId?: number) =>
-    http
-      .get<{ total: number; missions: Mission[] }>("/pv/missions", { params: expertId ? { expert_id: expertId } : {} })
-      .then((r) => r.data.missions),
+  missions: () => http.get<{ total: number; missions: Mission[] }>("/pv/missions").then((r) => r.data.missions),
+  myRequests: () => http.get<{ solicitations: Request[] }>("/solicitations/mine").then((r) => r.data.solicitations),
+  login: (email: string, password: string) => http.post<Session>("/auth/login", { email, password }).then((r) => r.data),
+  register: (email: string, display_name: string, password: string) =>
+    http.post<Session>("/auth/register", { email, display_name, password }).then((r) => r.data),
+  invitation: (token: string) => http.get<Invitation>("/auth/invitation", { params: { token } }).then((r) => r.data),
+  activate: (token: string, password: string, display_name?: string) =>
+    http.post<Session>("/auth/activate", { token, password, display_name }).then((r) => r.data),
+  logout: (refresh_token: string) => http.post("/auth/logout", { refresh_token }),
   prepareMission: (case_id: string) => http.post<MissionPrep>("/mission/prepare", { case_id }).then((r) => r.data),
   analyzePv: (body: { case_id: string; pv_id: string; pv_text: string; witness_name: string; pseudonymize: boolean }) =>
     http.post<PvAnalysis>("/pv/analyze", body).then((r) => r.data),

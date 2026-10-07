@@ -1,0 +1,180 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{longtable,array,booktabs}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\renewcommand{\arraystretch}{1.25}
+\begin{document}
+
+\begin{titlepage}
+\vspace*{3cm}
+{\Huge\bfseries Rapport d'expertise num\'erique}\\[1.2em]
+{\Large << mandat.type_label | tex >>}\\[0.4em]
+\rule{\textwidth}{0.6pt}\\[1.5em]
+\begin{tabular}{@{}p{4.2cm}p{11cm}@{}}
+Dossier & \texttt{<< mandat.case_id | tex >>} \\
+Mandataire & << mandat.mandataire_nom | tex >> (<< mandat.mandataire_fonction | tex >>) \\
+Expert & << expert.nom | tex >> \\
+Date d'\'edition & << date | tex >> \\
+Version & << version >> \\
+\end{tabular}\\[2em]
+{\small Document d'aide \`a l'expertise g\'en\'er\'e par Locard. Les constats automatiques doivent \^etre
+valid\'es par l'expert avant toute utilisation.}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{R\'esum\'e ex\'ecutif}
+Ce rapport r\'epond au mandat confi\'e \`a << expert.nom | tex >> par << mandat.mandataire_nom | tex >>
+dans un dossier de type << mandat.type_label | tex >> (priorit\'e << mandat.priority | tex >>).
+
+\begin{itemize}
+\item << pvs | length >> proc\`es-verbal(aux) d'audition analys\'e(s).
+\item << incoherences | length >> incoh\'erence(s) d\'etect\'ee(s), dont << high_count >> de s\'ev\'erit\'e haute.
+\item Score de coh\'erence des t\'emoignages : << coherence_pct >> \%.
+\item << hypotheses | length >> hypoth\`ese(s) d'investigation, << plan | length >> action(s) forensique(s) planifi\'ee(s).
+\item << rapports | length >> rapport(s) technique(s), << chain | length >> retenu(s) dans la cha\^ine optimale.
+\end{itemize}
+
+\section{Contexte et mandat}
+\textbf{Description du mandat.} << mandat.description | tex >>
+
+\textbf{Signature du mandat.}
+<% if mandat.signed_by %>
+Sign\'e par << mandat.signed_by | tex >> le << mandat.signed_at | tex >> (signature \'electronique simple, horodat\'ee et journalis\'ee).
+<% else %>
+Le mandat n'est pas sign\'e dans le syst\`eme.
+<% endif %>
+
+<% if contract %>
+\textbf{Contrat.} Empreinte SHA-256 du contrat : \texttt{<< contract.sha256 | tex >>}
+<% endif %>
+
+\section{M\'ethodologie}
+<% if hypotheses %>
+Les hypoth\`eses suivantes ont \'et\'e retenues comme pistes \`a v\'erifier. Elles ne constituent pas des conclusions.
+\begin{longtable}{@{}p{4.6cm}p{11.4cm}@{}}
+\toprule \textbf{Hypoth\`ese} & \textbf{Fondement} \\ \midrule \endhead
+<% for h in hypotheses %>
+<< h.label | tex >> & << h.basis | tex >> \\
+<% endfor %>
+\bottomrule
+\end{longtable}
+<% else %>
+Aucune hypoth\`ese n'a \'et\'e g\'en\'er\'ee.
+<% endif %>
+
+<% if plan %>
+\textbf{Plan d'actions forensiques} (dur\'ee totale estim\'ee : << duree_totale | tex >>)
+
+\begin{longtable}{@{}p{1.1cm}p{4cm}p{5cm}p{2.6cm}@{}}
+\toprule \textbf{Prio.} & \textbf{Action} & \textbf{Outils} & \textbf{Dur\'ee} \\ \midrule \endhead
+<% for p in plan %>
+<< p.priority >> & << p.label | tex >> & << p.outils | join(', ') | tex >> & << p.duree_estimee | tex >> \\
+<% endfor %>
+\bottomrule
+\end{longtable}
+<% endif %>
+
+\section{Analyse des preuves}
+\subsection{Proc\`es-verbaux d'audition}
+<% if pvs %>
+\begin{longtable}{@{}p{2cm}p{4.2cm}p{9.8cm}@{}}
+\toprule \textbf{PV} & \textbf{T\'emoin} & \textbf{\'El\'ements extraits} \\ \midrule \endhead
+<% for p in pvs %>
+<< p.pv_id | tex >> & << p.witness | tex >> & Personnes : << p.personnes | join(', ') | tex >>. Lieux : << p.lieux | join(', ') | tex >>. Dates : << p.dates | join(', ') | tex >>. Montants : << p.montants | join(', ') | tex >>. \\
+<% endfor %>
+\bottomrule
+\end{longtable}
+<% else %>
+Aucun PV analys\'e.
+<% endif %>
+
+\subsection{Incoh\'erences d\'etect\'ees}
+<% if incoherences %>
+<% for i in incoherences %>
+\paragraph{<< i.type_label | tex >> (s\'ev\'erit\'e << i.severity | tex >>).}
+<< i.description | tex >>
+
+\textit{Pourquoi : << i.why | tex >>}
+<% for e in i.evidence %>
+
+\begin{quote}\small [<< e.pv_id | tex >>] << e.excerpt | tex >>\end{quote}
+<% endfor %>
+<% endfor %>
+<% else %>
+Aucune incoh\'erence n'a \'et\'e d\'etect\'ee entre les t\'emoignages enregistr\'es.
+<% endif %>
+
+\section{R\'esultats techniques}
+<% if rapports %>
+\begin{longtable}{@{}p{1.3cm}p{3.8cm}p{1.8cm}p{9.1cm}@{}}
+\toprule \textbf{Rang} & \textbf{Action} & \textbf{Score} & \textbf{R\'esultats} \\ \midrule \endhead
+<% for r in rapports %>
+<< r.rank >> & << r.action | tex >> (<< r.rapport_id | tex >>) & << r.score_txt | tex >> & << r.resultats | tex >> \\
+<% endfor %>
+\bottomrule
+\end{longtable}
+Score global : << score_global | tex >>. Cha\^ine optimale (score $\geq$ 0,5) :
+<% if chain %>
+<< chain | join(' puis ') | tex >>.
+<% else %>
+aucun rapport n'atteint le seuil.
+<% endif %>
+<% else %>
+Aucun rapport technique n'a \'et\'e saisi.
+<% endif %>
+
+\section{Conclusion et recommandations}
+<% if conclusion %>
+<< conclusion | tex >>
+<% else %>
+\textit{Conclusion de l'expert non renseign\'ee.}
+<% endif %>
+
+<% if recommandations %>
+\textbf{Recommandations automatiques}
+\begin{itemize}
+<% for r in recommandations %>
+\item << r | tex >>
+<% endfor %>
+\end{itemize}
+<% endif %>
+
+\section{Cha\^ine de custody}
+Journal d'audit \`a cha\^ine de hachage SHA-256 (norme ISO/IEC 27037). Int\'egrit\'e de la cha\^ine au moment de
+l'\'edition : \textbf{<< chain_status | tex >>} (<< chain_entries >> entr\'ees au total).
+
+<% if audit %>
+\begin{longtable}{@{}p{3.3cm}p{1.3cm}p{3.6cm}p{4.8cm}p{3cm}@{}}
+\toprule \textbf{Horodatage} & \textbf{Mod.} & \textbf{Action} & \textbf{Utilisateur} & \textbf{Empreinte} \\ \midrule \endhead
+<% for a in audit %>
+\scriptsize << a.timestamp | tex >> & \scriptsize << a.module | tex >> & \scriptsize << a.action | tex >> & \scriptsize << a.user | tex >> & \scriptsize \texttt{<< a.hash | tex >>} \\
+<% endfor %>
+\bottomrule
+\end{longtable}
+<% endif %>
+
+\textbf{Protection des donn\'ees (RGPD).}
+<% if pseudonymized %>
+Les noms des personnes cit\'ees dans les PV ont \'et\'e remplac\'es par des identifiants (Personne A, Personne B, \ldots).
+<% else %>
+Ce rapport contient des donn\'ees personnelles issues des PV. Il doit \^etre conserv\'e et diffus\'e selon le principe de minimisation.
+<% endif %>
+
+\section*{Annexes : empreintes SHA-256}
+\begin{longtable}{@{}p{3.2cm}p{12.8cm}@{}}
+\toprule \textbf{Document} & \textbf{Empreinte} \\ \midrule \endhead
+<% for h in hashes %>
+<< h.name | tex >> & \texttt{\small << h.sha256 | tex >>} \\
+<% endfor %>
+\bottomrule
+\end{longtable}
+Un document ne peut pas contenir sa propre empreinte : celle de ce rapport est affich\'ee dans Locard et
+enregistr\'ee dans le journal d'audit \`a la g\'en\'eration.
+
+\end{document}

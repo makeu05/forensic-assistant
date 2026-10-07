@@ -47,6 +47,10 @@ def match_experts(description: str, case_type: str, experts: list[Expert], top_n
             "id": e.id,
             "nom": e.nom,
             "competences": e.competences,
+            "bio": e.bio,
+            "annees_experience": e.annees_experience,
+            "disponibilite": e.disponibilite,
+            "weights": {"text": W_TEXT, "dispo": W_DISPO, "exp": W_EXP},
             "score": total,
             "breakdown": {
                 "text_score": round(text_s, 2),

@@ -3,12 +3,17 @@
 Every rule compares two sentences (from the same PV or from different PVs) and returns
 an incoherence with evidence, so a human can check it. Rules are conservative on purpose:
 a false positive costs the investigator time, a missed one is caught by the human review.
+
+Each result carries a `rule` id and a `why` text in plain language: that is what the
+"Pourquoi ?" explanation in the interface shows.
 """
 from datetime import date
 
 from app.modules.pv.nlp import DISTANCES, fold, person_key
 
 SPEED_KMH = {"avion": 800, "train": 320, "voiture": 130, "sol": 320}
+MODE_TEXT = {"sol": "par voie terrestre", "avion": "en avion", "train": "en train", "voiture": "en voiture"}
+DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 
 
 def _d(iso: str) -> date:
@@ -41,13 +46,12 @@ def _range_txt(span: tuple[date, date]) -> str:
     return f"du {span[0].strftime('%d/%m/%Y')} au {span[1].strftime('%d/%m/%Y')}"
 
 
-def _evidence(*facts: dict) -> list[dict]:
-    return [{"pv_id": f["pv"], "excerpt": f["text"]} for f in facts]
-
-
-def _item(kind: str, severity: str, description: str, *facts: dict) -> dict:
-    return {"type": kind, "severity": severity, "description": description,
-            "pv_references": list(dict.fromkeys(f["pv"] for f in facts)), "evidence": _evidence(*facts)}
+def _item(kind: str, severity: str, description: str, rule: str, why: str, *facts: dict) -> dict:
+    return {
+        "type": kind, "severity": severity, "description": description, "rule": rule, "why": why,
+        "pv_references": list(dict.fromkeys(f["pv"] for f in facts)),
+        "evidence": [{"pv_id": f["pv"], "excerpt": f["text"]} for f in facts],
+    }
 
 
 def _temporal(facts: list[dict]) -> list[dict]:
@@ -62,8 +66,12 @@ def _temporal(facts: list[dict]) -> list[dict]:
                 delta = (_d(da) - _d(dc)).days
                 out.append(_item(
                     "temporelle", "haute",
-                    f"Chronologie impossible : operation autorisee le {_fr(da)} (PV {a['pv']}) alors que le "
-                    f"compte est declare compromis le {_fr(dc)} (PV {c['pv']}), soit {delta} jour(s) apres.", a, c))
+                    f"Chronologie impossible : opération autorisée le {_fr(da)} (PV {a['pv']}) alors que le "
+                    f"compte est déclaré compromis le {_fr(dc)} (PV {c['pv']}), soit {delta} jour(s) après.",
+                    "action_apres_compromission",
+                    "Une opération est déclarée autorisée à une date postérieure à celle où le compte est décrit "
+                    "comme compromis. Soit une des deux dates est erronée, soit l'autorisation n'était pas "
+                    "légitime : les deux déclarations ne peuvent pas être vraies en même temps.", a, c))
     for ab in (f for f in facts if "absence" in f["kinds"]):
         span, who = _span(ab), _people(ab)
         if not span or not who:
@@ -73,8 +81,11 @@ def _temporal(facts: list[dict]) -> list[dict]:
             if hit and (who & {person_key(p) for p in seen["persons"]}):
                 out.append(_item(
                     "temporelle", "haute",
-                    f"Une personne est vue le {_fr(hit[0])} (PV {seen['pv']}) alors qu'elle declare etre absente "
-                    f"{_range_txt(span)} (PV {ab['pv']}).", seen, ab))
+                    f"Une personne est vue le {_fr(hit[0])} (PV {seen['pv']}) alors qu'elle déclare être absente "
+                    f"{_range_txt(span)} (PV {ab['pv']}).",
+                    "presence_pendant_absence",
+                    "Une personne est vue à une date comprise dans la période où elle est déclarée absente. "
+                    "Une des deux déclarations est inexacte.", seen, ab))
     return out
 
 
@@ -88,13 +99,16 @@ def _geographic(facts: list[dict]) -> list[dict]:
         dist = DISTANCES.get((a, b)) or DISTANCES.get((b, a))
         if not dist:
             continue
-        needed = dist / SPEED_KMH[t["mode"]]
+        speed = SPEED_KMH[t["mode"]]
+        needed = dist / speed
         if t["hours"] < needed * 0.95:
-            mode = {"sol": "par voie terrestre", "avion": "en avion", "train": "en train", "voiture": "en voiture"}[t["mode"]]
             out.append(_item(
                 "geographique", "haute",
-                f"Trajet {a.capitalize()} - {b.capitalize()} ({dist} km) declare en {t['hours']:g} h : "
-                f"au moins {needed:.1f} h sont necessaires {mode} (PV {f['pv']}).", f))
+                f"Trajet {a.capitalize()} - {b.capitalize()} ({dist} km) déclaré en {t['hours']:g} h : "
+                f"au moins {needed:.1f} h sont nécessaires {MODE_TEXT[t['mode']]} (PV {f['pv']}).",
+                "trajet_impossible",
+                f"La durée annoncée est plus courte que le temps minimal pour parcourir {dist} km {MODE_TEXT[t['mode']]} "
+                f"(vitesse maximale retenue : {speed} km/h, soit {needed:.1f} h).", f))
     for ab in (f for f in facts if "absence" in f["kinds"] and f["places"]):
         who = _people(ab)
         span = _span(ab)
@@ -109,11 +123,15 @@ def _geographic(facts: list[dict]) -> list[dict]:
                     continue
                 severity, note = "haute", ""
             else:
-                severity, note = "moyenne", " (dates absentes : a verifier)"
+                severity, note = "moyenne", " (dates absentes : à vérifier)"
             out.append(_item(
                 "geographique", severity,
-                f"Presence sur site (PV {on['pv']}) incompatible avec une absence declaree a "
-                f"{ab['places'][0]} (PV {ab['pv']}){note}.", on, ab))
+                f"Présence sur site (PV {on['pv']}) incompatible avec une absence déclarée à "
+                f"{ab['places'][0]} (PV {ab['pv']}){note}.",
+                "presence_sur_site_pendant_absence",
+                "Une connexion interne ou une présence sur place est attribuée à une personne qui déclare être "
+                "ailleurs à la même période." + (" Les dates manquent dans l'un des PV : la sévérité est abaissée "
+                                                   "et la vérification revient à l'expert." if note else ""), on, ab))
     return out
 
 
@@ -133,10 +151,11 @@ def _factual(facts: list[dict]) -> list[dict]:
             seen_pairs.add(key)
             out.append(_item(
                 "factuelle", "haute",
-                f"Declarations contradictoires sur '{s1[0]}' ({s1[1]}) : "
+                f"Déclarations contradictoires sur « {s1[0]} » ({s1[1]}) : "
                 f"{'oui' if s1[2] else 'non'} (PV {f1['pv']}) contre {'oui' if s2[2] else 'non'} (PV {f2['pv']}).",
-                f1, f2))
-    day = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+                "etats_contradictoires",
+                "Deux déclarations décrivent l'état opposé du même objet à la même période (par exemple ouvert "
+                "et fermé). Elles ne peuvent pas être vraies toutes les deux.", f1, f2))
     for c in (f for f in facts if "click" in f["kinds"]):
         for r in (f for f in facts if "receive" in f["kinds"]):
             if c["dates"] and r["dates"]:
@@ -144,13 +163,16 @@ def _factual(facts: list[dict]) -> list[dict]:
                 when_c, when_r = _fr(min(c["dates"])), _fr(min(r["dates"]))
             elif c["weekdays"] and r["weekdays"] and not c["dates"] and not r["dates"]:
                 bad = c["weekdays"][0] < r["weekdays"][0]
-                when_c, when_r = day[c["weekdays"][0]], day[r["weekdays"][0]]
+                when_c, when_r = DAYS[c["weekdays"][0]], DAYS[r["weekdays"][0]]
             else:
                 continue
             if bad:
                 out.append(_item(
                     "factuelle", "haute",
-                    f"Piece jointe ouverte ({when_c}, PV {c['pv']}) avant sa reception ({when_r}, PV {r['pv']}).", c, r))
+                    f"Pièce jointe ouverte ({when_c}, PV {c['pv']}) avant sa réception ({when_r}, PV {r['pv']}).",
+                    "ouverture_avant_reception",
+                    "La pièce jointe est décrite comme ouverte avant d'avoir été reçue, ce qui est impossible. "
+                    "Les journaux du serveur de messagerie permettent de trancher.", c, r))
     return out
 
 

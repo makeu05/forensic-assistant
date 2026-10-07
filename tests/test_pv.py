@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from pathlib import Path
 
@@ -7,7 +8,6 @@ import pytest
 from app.modules.audit.service import sha256_file
 from app.modules.pv.nlp import analyze_text, fold, person_key
 from app.modules.pv.rules import detect
-from tests.conftest import MANDAT_FRAUDE
 
 DATASET = json.loads((Path(__file__).parent / "data" / "pv_dataset.json").read_text(encoding="utf-8"))
 CATEGORIES = {
@@ -114,76 +114,74 @@ def test_5000_word_pv_under_3_seconds():
 # ---------------------------------------------------------------- API
 
 @pytest.fixture(scope="module")
-def case_id(client):
-    return client.post("/api/v1/cases", json=MANDAT_FRAUDE).json()["case_id"]
+def mission(chosen_case):
+    """A case with a chosen investigator: (case_id, investigator Api)."""
+    return chosen_case()
 
 
-def _post(client, case_id, pv, **extra):
-    return client.post("/api/v1/pv/analyze", json={
+def _post(expert, case_id, pv, **extra):
+    return expert.post("/api/v1/pv/analyze", json={
         "case_id": case_id, "pv_id": pv["pv_id"], "pv_text": pv["text"], "witness_name": pv["witness"], **extra})
 
 
-def test_api_analyze_two_pvs_flags_inconsistency_and_hashes_file(client, case_id):
+def test_api_analyze_two_pvs_flags_inconsistency_and_hashes_file(client, mission):
+    case_id, expert = mission
     first, second = DATASET["pvs"][0], DATASET["pvs"][1]
-    r1 = _post(client, case_id, first)
+    r1 = _post(expert, case_id, first)
     assert r1.status_code == 200
     assert r1.json()["incoherences"] == [] and r1.json()["score_coherence"] == 1.0
-    r2 = _post(client, case_id, second)
-    body = r2.json()
+    body = _post(expert, case_id, second).json()
     assert [i["type"] for i in body["incoherences"]] == ["temporelle"]
     assert body["score_coherence"] == 0.8
     assert "Hugo Perrin" in body["entities"]["personnes"]
 
-    stored = Path(client.get(f"/api/v1/pv?case_id={case_id}").json()["pvs"][0]["sha256"])  # hash exposed
-    assert len(str(stored)) == 64
+    assert len(expert.get(f"/api/v1/pv?case_id={case_id}").json()["pvs"][0]["sha256"]) == 64
     logs = client.get(f"/api/v1/audit/logs?case_id={case_id}").json()["logs"]
     entry = [log for log in logs if log["module"] == "F"][0]
     assert entry["hash"] == r1.json()["sha256"]
-    assert sha256_file(entry["file_path"]) == entry["hash"]
+    assert sha256_file(str(Path(os.environ["OUTPUT_DIR"]) / entry["file"])) == entry["hash"]
+    assert "file_path" not in entry  # no absolute server path leaks to clients
+    assert entry["user"].endswith("@experts.example")  # the audit trail names the real investigator
     assert client.get("/api/v1/audit/chain/verify").json()["valid"] is True
 
 
-def test_api_reanalysis_is_idempotent(client, case_id):
-    before = len(client.get(f"/api/v1/pv?case_id={case_id}").json()["pvs"])
-    assert _post(client, case_id, DATASET["pvs"][0]).status_code == 200
-    assert len(client.get(f"/api/v1/pv?case_id={case_id}").json()["pvs"]) == before
+def test_api_reanalysis_is_idempotent(mission):
+    case_id, expert = mission
+    before = len(expert.get(f"/api/v1/pv?case_id={case_id}").json()["pvs"])
+    assert _post(expert, case_id, DATASET["pvs"][0]).status_code == 200
+    assert len(expert.get(f"/api/v1/pv?case_id={case_id}").json()["pvs"]) == before
 
 
-def test_api_report_and_pseudonymization(client, case_id):
-    report = client.get(f"/api/v1/pv/report?case_id={case_id}").json()
+def test_api_report_and_pseudonymization(mission):
+    case_id, expert = mission
+    report = expert.get(f"/api/v1/pv/report?case_id={case_id}").json()
     assert len(report["incoherences"]) == 1 and report["score_coherence"] == 0.8
-    masked = client.get(f"/api/v1/pv/report?case_id={case_id}&pseudonymize=true").json()
+    masked = expert.get(f"/api/v1/pv/report?case_id={case_id}&pseudonymize=true").json()
     text = json.dumps(masked, ensure_ascii=False)
     for name in ("Lambert", "Girard", "Perrin", "Morel"):
         assert name not in text
     assert "Personne A" in text
-    masked_one = _post(client, case_id, DATASET["pvs"][1], pseudonymize=True).json()
+    masked_one = _post(expert, case_id, DATASET["pvs"][1], pseudonymize=True).json()
     assert "Perrin" not in json.dumps(masked_one, ensure_ascii=False)
 
 
-def test_api_validation_and_errors(client, case_id):
+def test_api_validation_and_errors(mission):
+    case_id, expert = mission
     pv = DATASET["pvs"][0]
-    assert client.post("/api/v1/pv/analyze", json={
+    assert expert.post("/api/v1/pv/analyze", json={
         "case_id": "nope", "pv_id": "x1", "pv_text": pv["text"], "witness_name": "Test Test"}).status_code == 404
-    assert _post(client, case_id, {**pv, "pv_id": "../evil"}).status_code == 422
-    assert _post(client, case_id, {**pv, "text": "trop court"}).status_code == 422
+    assert _post(expert, case_id, {**pv, "pv_id": "../evil"}).status_code == 422
+    assert _post(expert, case_id, {**pv, "text": "trop court"}).status_code == 422
 
 
-def test_api_missions_dashboard_lists_only_cases_with_chosen_expert(client):
-    new_case = client.post("/api/v1/cases", json=MANDAT_FRAUDE).json()["case_id"]
-    before = client.get("/api/v1/pv/missions").json()
-    assert new_case not in [m["case_id"] for m in before["missions"]]
-
-    expert_id = client.get(f"/api/v1/cases/{new_case}/experts").json()["experts"][0]["id"]
-    client.post("/api/v1/solicitations", json={"case_id": new_case, "expert_ids": [expert_id]})
-    sol = client.get(f"/api/v1/solicitations?case_id={new_case}").json()["solicitations"][0]["id"]
-    client.put(f"/api/v1/solicitations/{sol}/respond", json={"status": "accepted"})
-    client.post("/api/v1/solicitations/select", json={"case_id": new_case, "expert_id": expert_id})
-    _post(client, new_case, DATASET["pvs"][0])
-    _post(client, new_case, DATASET["pvs"][1])
-
-    mine = {m["case_id"]: m for m in client.get(f"/api/v1/pv/missions?expert_id={expert_id}").json()["missions"]}
+def test_api_missions_dashboard_shows_only_my_missions(client, chosen_case, mission):
+    new_case, expert = chosen_case()
+    _post(expert, new_case, DATASET["pvs"][0])
+    _post(expert, new_case, DATASET["pvs"][1])
+    mine = {m["case_id"]: m for m in expert.get("/api/v1/pv/missions").json()["missions"]}
     m = mine[new_case]
     assert (m["pv_count"], m["incoherence_count"], m["high_severity_count"], m["score_coherence"]) == (2, 1, 1, 0.8)
-    assert m["expert"]["id"] == expert_id
-    assert client.get("/api/v1/pv/missions?expert_id=999999").json()["total"] == 0
+    # the other investigator's mission (fixture `mission`) is not listed unless it is the same person
+    other_case, other_expert = mission
+    listed = {x["case_id"] for x in expert.get("/api/v1/pv/missions").json()["missions"]}
+    assert (other_case in listed) == (other_expert is expert)

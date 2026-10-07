@@ -13,7 +13,10 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from app.core.latex import LatexError, render_pdf
 from app.db import Base, get_db
 from app.modules.audit.service import log_action, sha256_file
-from app.modules.cases.router import get_case_or_404, is_signed
+from app.modules.auth.access import case_for
+from app.modules.auth.router import current_user, require_role
+from app.modules.auth.service import User
+from app.modules.cases.router import is_signed
 from app.modules.matching.service import Expert
 
 router = APIRouter(prefix="/contracts", tags=["C - Contracts"])
@@ -38,8 +41,8 @@ class GenerateIn(BaseModel):
 
 
 @router.post("/generate", status_code=201)
-def generate(body: GenerateIn, db: Session = Depends(get_db)):
-    case = get_case_or_404(db, body.case_id)
+def generate(body: GenerateIn, user: User = Depends(require_role("mandataire")), db: Session = Depends(get_db)):
+    case = case_for(db, body.case_id, user, "own")
     if case.chosen_expert_id is None:
         raise HTTPException(409, "No expert has been selected for this case")
     if not is_signed(db, case.id):
@@ -55,20 +58,21 @@ def generate(body: GenerateIn, db: Session = Depends(get_db)):
             "expert": {"nom": expert.nom, "email": expert.email, "competences": expert.competences},
         }, output_dir() / "contracts" / cid, "mandat")
     except LatexError as e:
-        log_action(db, "C", "generate_contract_failed", case_id=case.id, data={"error": str(e)[:300]})
+        log_action(db, "C", "generate_contract_failed", case_id=case.id, user=user.email, data={"error": str(e)[:300]})
         raise HTTPException(500, "Contract generation failed") from e
 
     c = Contract(id=cid, case_id=case.id, pdf_path=str(pdf), hash_sha256=sha256_file(str(pdf)),
                  generated_at=now.isoformat(timespec="seconds").replace("+00:00", "Z"))
     db.add(c)
     db.commit()
-    log_action(db, "C", "generate_contract", case_id=case.id, file_path=str(pdf))
+    log_action(db, "C", "generate_contract", case_id=case.id, user=user.email, file_path=str(pdf))
     return {"contract_id": c.id, "pdf_url": f"/api/v1/contracts/{c.id}/download",
             "hash_sha256": c.hash_sha256, "generated_at": c.generated_at}
 
 
 @router.get("")
-def contract_for_case(case_id: str, db: Session = Depends(get_db)):
+def contract_for_case(case_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    case_for(db, case_id, user, "view")
     c = db.scalars(select(Contract).where(Contract.case_id == case_id)
                    .order_by(Contract.generated_at.desc()).limit(1)).first()
     if not c:
@@ -78,10 +82,11 @@ def contract_for_case(case_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{contract_id}/download")
-def download(contract_id: str, db: Session = Depends(get_db)):
+def download(contract_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
     c = db.get(Contract, contract_id)
     if not c or not Path(c.pdf_path).is_file():
         raise HTTPException(404, "Contract not found")
+    case_for(db, c.case_id, user, "view")
     if sha256_file(c.pdf_path) != c.hash_sha256:
         raise HTTPException(409, "Integrity check failed: stored PDF was modified")
     return FileResponse(c.pdf_path, media_type="application/pdf", filename="mandat.pdf")

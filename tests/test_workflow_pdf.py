@@ -4,21 +4,22 @@ from app.core.latex import tex
 from tests.conftest import MANDAT_FRAUDE
 
 
-def _case_with_experts(client):
+def _case_with_experts(client):  # noqa: D103
     cid = client.post("/api/v1/cases", json=MANDAT_FRAUDE).json()["case_id"]
     ids = [e["id"] for e in client.get(f"/api/v1/cases/{cid}/experts").json()["experts"]]
     sols = client.post("/api/v1/solicitations", json={"case_id": cid, "expert_ids": ids}).json()["solicitations"]
     return cid, ids, sols
 
 
-def test_state_machine(client):
+def test_state_machine(client, expert_api):
     cid, ids, sols = _case_with_experts(client)
     s_acc, s_ref, s_pen = sols
-    assert client.put(f"/api/v1/solicitations/{s_acc['id']}/respond", json={"status": "accepted"}).status_code == 200
-    assert client.put(f"/api/v1/solicitations/{s_ref['id']}/respond",
-                      json={"status": "refused", "reason": "indisponible"}).status_code == 200
+    acc, ref = expert_api(s_acc["expert_id"]), expert_api(s_ref["expert_id"])
+    assert acc.put(f"/api/v1/solicitations/{s_acc['id']}/respond", json={"status": "accepted"}).status_code == 200
+    assert ref.put(f"/api/v1/solicitations/{s_ref['id']}/respond",
+                   json={"status": "refused", "reason": "indisponible"}).status_code == 200
     # cannot respond twice
-    assert client.put(f"/api/v1/solicitations/{s_acc['id']}/respond", json={"status": "refused"}).status_code == 409
+    assert acc.put(f"/api/v1/solicitations/{s_acc['id']}/respond", json={"status": "refused"}).status_code == 409
     # cannot choose refused or pending experts
     for eid in (s_ref["expert_id"], s_pen["expert_id"]):
         assert client.post("/api/v1/solicitations/select", json={"case_id": cid, "expert_id": eid}).status_code == 409
@@ -29,8 +30,8 @@ def test_state_machine(client):
     assert client.post("/api/v1/solicitations/select", json={"case_id": cid, "expert_id": s_acc["expert_id"]}).status_code == 409
 
 
-def test_contract_requires_signature(client):
-    cid = _chosen_case(client, sign=False)
+def test_contract_requires_signature(client, chosen_case):
+    cid, _ = chosen_case(sign=False)
     assert client.post("/api/v1/contracts/generate", json={"case_id": cid}).status_code == 409
     assert client.get(f"/api/v1/cases/{cid}").json()["signed"] is False
     s = client.post(f"/api/v1/cases/{cid}/sign", json={"signatory_name": "Dupont"})
@@ -52,22 +53,10 @@ def test_tex_escaping():
     assert tex(r"\input{/etc/passwd} & 50% $x_1") == r"\textbackslash{}input\{/etc/passwd\} \& 50\% \$x\_1"
 
 
-def _chosen_case(client, description=None, sign=True):
-    body = {**MANDAT_FRAUDE, **({"description": description} if description else {})}
-    cid = client.post("/api/v1/cases", json=body).json()["case_id"]
-    eid = client.get(f"/api/v1/cases/{cid}/experts").json()["experts"][0]["id"]
-    sid = client.post("/api/v1/solicitations", json={"case_id": cid, "expert_ids": [eid]}).json()["solicitations"][0]["id"]
-    client.put(f"/api/v1/solicitations/{sid}/respond", json={"status": "accepted"})
-    client.post("/api/v1/solicitations/select", json={"case_id": cid, "expert_id": eid})
-    if sign:
-        client.post(f"/api/v1/cases/{cid}/sign", json={"signatory_name": "Dupont"})
-    return cid
-
-
 @pytest.mark.skipif(__import__("shutil").which("pdflatex") is None, reason="pdflatex not installed")
-def test_contract_pdf_and_hash(client):
+def test_contract_pdf_and_hash(client, chosen_case):
     # hostile description must not break compilation or execute anything
-    cid = _chosen_case(client, r"Virement \input{/etc/passwd} & 50% $ # _ { } ~ ^ suspect")
+    cid, _ = chosen_case(description=r"Virement \input{/etc/passwd} & 50% $ # _ { } ~ ^ suspect")
     r = client.post("/api/v1/contracts/generate", json={"case_id": cid})
     assert r.status_code == 201, r.text
     data = r.json()
@@ -78,9 +67,9 @@ def test_contract_pdf_and_hash(client):
 
 
 @pytest.mark.skipif(__import__("shutil").which("pdflatex") is None, reason="pdflatex not installed")
-def test_mission_prepare(client):
-    cid = _chosen_case(client)
-    r = client.post("/api/v1/mission/prepare", json={"case_id": cid})
+def test_mission_prepare(client, chosen_case):
+    cid, expert = chosen_case()
+    r = expert.post("/api/v1/mission/prepare", json={"case_id": cid})
     assert r.status_code == 200
     assert len(r.json()["questions"]) >= 5
-    assert client.get(r.json()["guide_pdf_url"]).content.startswith(b"%PDF")
+    assert expert.get(r.json()["guide_pdf_url"]).content.startswith(b"%PDF")

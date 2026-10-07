@@ -196,6 +196,7 @@ def analyze_text(text: str, pv_id: str, witness: str, default_year: int) -> dict
     amounts: dict[float, str] = {}
     times: list[str] = []
     facts: list[dict] = []
+    spans: list[tuple[int, int, str]] = []  # (start, end, label) in the original text, for highlighting
 
     for s, e in _sentences(text):
         sent, f = text[s:e], folded[s:e]
@@ -203,18 +204,22 @@ def analyze_text(text: str, pv_id: str, witness: str, default_year: int) -> dict
         s_places = []
         for a, b, label, raw in spacy_ents:
             if s <= a and b <= e:
+                name = clean_person(raw)
+                at = a + max(raw.find(name), 0)
                 if label == "PER":
-                    name = clean_person(raw)
                     if name and person_key(name):
                         s_persons.append(name)
+                        spans.append((at, at + len(name), "personne"))
                 else:
-                    name = clean_person(raw)
                     s_places.append(CITIES.get(fold(name), name))
+                    spans.append((at, at + len(name), "lieu"))
         for tm in TITLED_PERSON.finditer(sent):  # spaCy often misses a lone "M. Dupont"
             s_persons.append(tm.group(1))
+            spans.append((s + tm.start(1), s + tm.end(1), "personne"))
         for pm in PLACE_RE.finditer(f):
             key = pm.group(1)
             s_places.append(CITIES.get(key, GENERIC_PLACES.get(key)))
+            spans.append((s + pm.start(1), s + pm.end(1), "lieu"))
         s_places = list(dict.fromkeys(p for p in s_places if p))
         by_key: dict[str, str] = {}
         for name in s_persons:
@@ -230,7 +235,9 @@ def analyze_text(text: str, pv_id: str, witness: str, default_year: int) -> dict
         found, rng = find_dates(f, year)
         for a, b, dt in found:
             dates_raw.append((sent[a:b], dt.isoformat()))
+            spans.append((s + a, s + b, "date"))
         for am in AMOUNT_RE.finditer(f):
+            spans.append((s + am.start(), s + am.end(), "montant"))
             whole = re.sub(r"[   .]", "", am.group(1))
             val = float(whole + ("." + am.group(2) if am.group(2) else ""))
             amounts.setdefault(val, sent[am.start():am.end()].strip())
@@ -239,6 +246,7 @@ def analyze_text(text: str, pv_id: str, witness: str, default_year: int) -> dict
                 continue
             h, mi = (tm.group(1), tm.group(2)) if tm.group(1) else (tm.group(3), tm.group(4))
             times.append(f"{int(h):02d}:{mi or '00'}")
+            spans.append((s + tm.start(), s + tm.end(), "heure"))
 
         if SKIP_FACTS.match(f):
             continue
@@ -285,4 +293,28 @@ def analyze_text(text: str, pv_id: str, witness: str, default_year: int) -> dict
         "montants_valeurs": sorted(amounts),
         "heures": list(dict.fromkeys(times)),
     }
-    return {"entities": entities, "facts": facts}
+    return {"entities": entities, "facts": facts, "spans": merge_spans(spans)}
+
+
+def merge_spans(spans: list[tuple[int, int, str]]) -> list[list]:
+    """Sorted, non-overlapping [start, end, label] triples (the longest span wins on overlap)."""
+    out: list[list] = []
+    for a, b, label in sorted(set(spans), key=lambda x: (x[0], -(x[1] - x[0]))):
+        if b > a and (not out or a >= out[-1][1]):
+            out.append([a, b, label])
+    return out
+
+
+def build_segments(text: str, spans: list[list], mask=None) -> list[dict]:
+    """Cut the text into consecutive {text, label} pieces, ready to render with highlights.
+    `mask` (str -> str) is applied to every piece, so a pseudonymized view never exposes a name."""
+    mask = mask or (lambda s: s)
+    out, pos = [], 0
+    for a, b, label in spans:
+        if a > pos:
+            out.append({"text": mask(text[pos:a]), "label": None})
+        out.append({"text": mask(text[a:b]), "label": label})
+        pos = b
+    if pos < len(text):
+        out.append({"text": mask(text[pos:]), "label": None})
+    return out

@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from sqlalchemy import update
 
 from app.db import SessionLocal
@@ -42,8 +45,10 @@ def test_audit_trail_and_chain(client):
     assert client.get("/api/v1/audit/chain/verify").json()["valid"] is True
 
 
-def test_file_hash_verify(client, tmp_path):
-    f = tmp_path / "pv.txt"
+def test_file_hash_verify(client):
+    folder = Path(os.environ["OUTPUT_DIR"]) / "evidence"
+    folder.mkdir(parents=True, exist_ok=True)
+    f = folder / "pv.txt"
     f.write_text("declaration")
     h = client.post("/api/v1/audit/log", json={"module": "F", "action": "x", "file_path": str(f)}).json()["hash"]
     ok = client.post("/api/v1/audit/verify", json={"file_path": str(f), "expected_hash": h})

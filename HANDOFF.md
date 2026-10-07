@@ -1,4 +1,4 @@
-# Project handoff: Assistant intelligent d'investigation numerique
+# Locard: project handoff (assistant intelligent d'investigation numerique)
 
 Context file for continuing this project in a new chat. Written 2026-10-07.
 Owner git identity for this repo: MAKEU05 <makeustelybelva@gmail.com> (personal project, NOT the NexCQI work account). Set locally in `.git/config`. Never add a Co-Authored-By line.

@@ -22,7 +22,7 @@ export default function App() {
       <AppBar position="static" elevation={0}>
         <Toolbar sx={{ gap: 2, flexWrap: "wrap" }}>
           <Typography variant="h6" sx={{ fontWeight: 800, cursor: "pointer" }} onClick={home}>
-            Assistant d'investigation numerique
+            Locard
           </Typography>
           <Typography variant="caption" sx={{ opacity: 0.8, flexGrow: 1 }}>
             Espace {ROLE_LABEL[role].toLowerCase()}

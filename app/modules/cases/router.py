@@ -9,7 +9,10 @@ from sqlalchemy import Integer, String, Text, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
-from app.modules.audit.service import log_action
+from app.modules.audit.service import AuditLog, log_action
+from app.modules.auth.access import case_for, visible_cases
+from app.modules.auth.router import current_user, require_role
+from app.modules.auth.service import User
 from app.modules.matching.router import run_matching
 
 router = APIRouter(prefix="/cases", tags=["A - Cases"])
@@ -29,6 +32,7 @@ class Case(Base):
     mandataire_fonction: Mapped[str] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="en_attente")
     chosen_expert_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    owner_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)  # the mandataire
     created_at: Mapped[str] = mapped_column(String(40))
 
 
@@ -74,6 +78,36 @@ def serialize(c: Case) -> dict:
     }
 
 
+STAGES = [("mandat", "Mandat"), ("experts", "Experts"), ("contrat", "Contrat"),
+          ("preparation", "Préparation"), ("analyse", "Analyse"), ("rapport", "Rapport")]
+
+
+def lifecycle(db: Session, c: Case) -> dict:
+    """Where the case stands: each stage is done when its output exists, the first undone one is current."""
+    from app.modules.contracts.router import Contract, output_dir
+    from app.modules.pv.router import Pv
+    from app.modules.reports.final import FinalReport
+
+    def exists(model) -> bool:
+        return db.scalars(select(model.id).where(model.case_id == c.id).limit(1)).first() is not None
+
+    done = {
+        "mandat": True,
+        "experts": c.chosen_expert_id is not None,
+        "contrat": exists(Contract),
+        "preparation": (output_dir() / "guides" / c.id / "guide.pdf").is_file(),
+        "analyse": exists(Pv),
+        "rapport": exists(FinalReport),
+    }
+    current = next((k for k, _ in STAGES if not done[k]), None)
+    last = db.scalar(select(func.max(AuditLog.timestamp)).where(AuditLog.case_id == c.id))
+    return {
+        "stages": [{"key": k, "label": label, "done": done[k], "current": k == current} for k, label in STAGES],
+        "progress": round(sum(done.values()) / len(STAGES), 2),
+        "last_activity": last or c.created_at,
+    }
+
+
 def get_case_or_404(db: Session, case_id: str) -> Case:
     c = db.get(Case, case_id)
     if not c:
@@ -82,7 +116,7 @@ def get_case_or_404(db: Session, case_id: str) -> Case:
 
 
 @router.post("", status_code=201)
-def create_case(body: CaseIn, db: Session = Depends(get_db)):
+def create_case(body: CaseIn, user: User = Depends(require_role("mandataire")), db: Session = Depends(get_db)):
     c = Case(
         id=str(uuid.uuid4()),
         case_type=body.case_type,
@@ -90,35 +124,39 @@ def create_case(body: CaseIn, db: Session = Depends(get_db)):
         priority=body.priority,
         mandataire_nom=body.mandataire.nom,
         mandataire_fonction=body.mandataire.fonction,
+        owner_id=user.id,
         created_at=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     )
     db.add(c)
     db.commit()
-    log_action(db, "A", "create_case", case_id=c.id, user=body.mandataire.nom,
+    log_action(db, "A", "create_case", case_id=c.id, user=user.email,
                data={"case_type": c.case_type, "priority": c.priority})
     return {"case_id": c.id}
 
 
 @router.get("")
-def list_cases(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+def list_cases(limit: int = 50, offset: int = 0, user: User = Depends(current_user),
+               db: Session = Depends(get_db)):
     limit = max(1, min(limit, 50))
-    rows = db.scalars(select(Case).order_by(Case.created_at.desc()).limit(limit).offset(offset)).all()
+    mine = visible_cases(user)
+    rows = db.scalars(select(Case).where(mine).order_by(Case.created_at.desc()).limit(limit).offset(offset)).all()
     signed = set(db.scalars(select(MandateSignature.case_id)))
     return {
-        "total": db.scalar(select(func.count()).select_from(Case)),
-        "cases": [{**serialize(c), "signed": c.id in signed} for c in rows],
+        "total": db.scalar(select(func.count()).select_from(Case).where(mine)),
+        "cases": [{**serialize(c), "signed": c.id in signed, **lifecycle(db, c)} for c in rows],
     }
 
 
 @router.get("/{case_id}")
-def get_case(case_id: str, db: Session = Depends(get_db)):
-    c = get_case_or_404(db, case_id)
-    return {**serialize(c), "signed": is_signed(db, c.id)}
+def get_case(case_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    c = case_for(db, case_id, user, "view")
+    return {**serialize(c), "signed": is_signed(db, c.id), **lifecycle(db, c)}
 
 
 @router.post("/{case_id}/sign")
-def sign_mandate(case_id: str, body: SignIn, db: Session = Depends(get_db)):
-    c = get_case_or_404(db, case_id)
+def sign_mandate(case_id: str, body: SignIn, user: User = Depends(require_role("mandataire")),
+                 db: Session = Depends(get_db)):
+    c = case_for(db, case_id, user, "own")
     existing = db.get(MandateSignature, c.id)
     if existing:
         return {"signed": True, "signed_by": existing.signed_by, "signed_at": existing.signed_at}
@@ -128,11 +166,11 @@ def sign_mandate(case_id: str, body: SignIn, db: Session = Depends(get_db)):
     )
     db.add(sig)
     db.commit()
-    log_action(db, "A", "sign_mandate", case_id=c.id, user=sig.signed_by)
+    log_action(db, "A", "sign_mandate", case_id=c.id, user=user.email, data={"signed_by": sig.signed_by})
     return {"signed": True, "signed_by": sig.signed_by, "signed_at": sig.signed_at}
 
 
 @router.get("/{case_id}/experts")
-def case_experts(case_id: str, db: Session = Depends(get_db)):
-    c = get_case_or_404(db, case_id)
-    return run_matching(db, c.id, c.case_type, c.description)
+def case_experts(case_id: str, user: User = Depends(require_role("mandataire")), db: Session = Depends(get_db)):
+    c = case_for(db, case_id, user, "own")
+    return run_matching(db, c.id, c.case_type, c.description, user.email)

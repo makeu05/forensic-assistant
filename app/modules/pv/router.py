@@ -2,6 +2,7 @@
 import json
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -10,10 +11,13 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
 from app.modules.audit.service import log_action, sha256_file
-from app.modules.cases.router import Case, get_case_or_404
+from app.modules.auth.access import case_for
+from app.modules.auth.router import current_user, require_role
+from app.modules.auth.service import User
+from app.modules.cases.router import Case
 from app.modules.contracts.router import output_dir
 from app.modules.matching.service import Expert
-from app.modules.pv.nlp import analyze_text, fold, person_key
+from app.modules.pv.nlp import analyze_text, build_segments, fold, person_key
 from app.modules.pv.rules import detect
 
 router = APIRouter(prefix="/pv", tags=["F - PV"])
@@ -95,8 +99,8 @@ def _mask(obj, fn):
 
 
 @router.post("/analyze")
-def analyze(body: PvIn, db: Session = Depends(get_db)):
-    case = get_case_or_404(db, body.case_id)
+def analyze(body: PvIn, user: User = Depends(require_role("investigateur")), db: Session = Depends(get_db)):
+    case = case_for(db, body.case_id, user, "mission")
     started = datetime.now(timezone.utc)
     result = analyze_text(body.pv_text, body.pv_id, body.witness_name, int(case.created_at[:4]))
 
@@ -117,7 +121,7 @@ def analyze(body: PvIn, db: Session = Depends(get_db)):
 
     pvs = _case_pvs(db, case.id)
     mine = [i for i in detect(_all_facts(pvs)) if body.pv_id in i["pv_references"]]
-    log_action(db, "F", "analyze_pv", case_id=case.id, file_path=str(path),
+    log_action(db, "F", "analyze_pv", case_id=case.id, user=user.email, file_path=str(path),
                data={"pv_id": body.pv_id, "incoherences": len(mine), "pseudonymized": body.pseudonymize})
     db.commit()
 
@@ -128,17 +132,18 @@ def analyze(body: PvIn, db: Session = Depends(get_db)):
 
 
 @router.get("")
-def list_pvs(case_id: str, db: Session = Depends(get_db)):
-    get_case_or_404(db, case_id)
+def list_pvs(case_id: str, user: User = Depends(require_role("investigateur")), db: Session = Depends(get_db)):
+    case_for(db, case_id, user, "mission")
     return {"case_id": case_id, "pvs": [
         {"pv_id": p.pv_id, "witness_name": p.witness_name, "sha256": p.sha256, "analyzed_at": p.analyzed_at}
         for p in _case_pvs(db, case_id)]}
 
 
 @router.get("/report")
-def report(case_id: str, pseudonymize: bool = False, db: Session = Depends(get_db)):
+def report(case_id: str, pseudonymize: bool = False, user: User = Depends(require_role("investigateur")),
+           db: Session = Depends(get_db)):
     """Consolidated view: entities per PV and every inconsistency found across the case."""
-    get_case_or_404(db, case_id)
+    case_for(db, case_id, user, "mission")
     pvs = _case_pvs(db, case_id)
     incs = detect(_all_facts(pvs))
     out = {"case_id": case_id,
@@ -149,11 +154,10 @@ def report(case_id: str, pseudonymize: bool = False, db: Session = Depends(get_d
 
 
 @router.get("/missions")
-def missions(expert_id: int | None = None, db: Session = Depends(get_db)):
-    """Investigator dashboard: every case with a chosen expert, plus PV and inconsistency stats."""
-    query = select(Case, Expert).join(Expert, Expert.id == Case.chosen_expert_id).order_by(Case.created_at.desc())
-    if expert_id is not None:
-        query = query.where(Case.chosen_expert_id == expert_id)
+def missions(user: User = Depends(require_role("investigateur")), db: Session = Depends(get_db)):
+    """Investigator dashboard: the logged-in investigator's missions, with PV and inconsistency stats."""
+    query = (select(Case, Expert).join(Expert, Expert.id == Case.chosen_expert_id)
+             .where(Case.chosen_expert_id == user.expert_id).order_by(Case.created_at.desc()))
     rows = []
     for case, expert in db.execute(query):
         pvs = _case_pvs(db, case.id)
@@ -168,3 +172,26 @@ def missions(expert_id: int | None = None, db: Session = Depends(get_db)):
             "last_pv_at": max((p.analyzed_at for p in pvs), default=None),
         })
     return {"total": len(rows), "missions": rows}
+
+
+@router.get("/{pv_id}")
+def get_pv(pv_id: str, case_id: str, pseudonymize: bool = False,
+           user: User = Depends(require_role("investigateur")), db: Session = Depends(get_db)):
+    """One stored PV, cut into highlighted segments, with the inconsistencies that involve it.
+    The file is hashed again before it is served: a PV modified on disk is refused."""
+    case_for(db, case_id, user, "mission")
+    row = db.scalars(select(Pv).where(Pv.case_id == case_id, Pv.pv_id == pv_id)).first()
+    if row is None:
+        raise HTTPException(404, "PV not found")
+    if sha256_file(row.file_path) != row.sha256:
+        raise HTTPException(409, "Integrity check failed: the stored PV was modified")
+    text = Path(row.file_path).read_text(encoding="utf-8")
+    analysis = json.loads(row.analysis)
+    pvs = _case_pvs(db, case_id)
+    mine = [i for i in detect(_all_facts(pvs)) if pv_id in i["pv_references"]]
+    out = {"pv_id": pv_id, "witness_name": row.witness_name, "sha256": row.sha256, "verified": True,
+           "analyzed_at": row.analyzed_at, "entities": analysis["entities"], "incoherences": mine,
+           "score_coherence": _score(len(mine)), "word_count": len(text.split())}
+    mask = _pseudonymizer(pvs) if pseudonymize else None
+    out["segments"] = build_segments(text, analysis.get("spans", []), mask)
+    return _mask(out, mask) if mask else out
