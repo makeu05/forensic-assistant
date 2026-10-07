@@ -7,13 +7,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import String
+from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.core.latex import LatexError, render_pdf
 from app.db import Base, get_db
 from app.modules.audit.service import log_action, sha256_file
-from app.modules.cases.router import get_case_or_404
+from app.modules.cases.router import get_case_or_404, is_signed
 from app.modules.matching.service import Expert
 
 router = APIRouter(prefix="/contracts", tags=["C - Contracts"])
@@ -42,6 +42,8 @@ def generate(body: GenerateIn, db: Session = Depends(get_db)):
     case = get_case_or_404(db, body.case_id)
     if case.chosen_expert_id is None:
         raise HTTPException(409, "No expert has been selected for this case")
+    if not is_signed(db, case.id):
+        raise HTTPException(409, "The mandate must be signed by the mandataire first")
     expert = db.get(Expert, case.chosen_expert_id)
     now = datetime.now(timezone.utc)
     cid = str(uuid.uuid4())
@@ -61,6 +63,16 @@ def generate(body: GenerateIn, db: Session = Depends(get_db)):
     db.add(c)
     db.commit()
     log_action(db, "C", "generate_contract", case_id=case.id, file_path=str(pdf))
+    return {"contract_id": c.id, "pdf_url": f"/api/v1/contracts/{c.id}/download",
+            "hash_sha256": c.hash_sha256, "generated_at": c.generated_at}
+
+
+@router.get("")
+def contract_for_case(case_id: str, db: Session = Depends(get_db)):
+    c = db.scalars(select(Contract).where(Contract.case_id == case_id)
+                   .order_by(Contract.generated_at.desc()).limit(1)).first()
+    if not c:
+        raise HTTPException(404, "No contract for this case")
     return {"contract_id": c.id, "pdf_url": f"/api/v1/contracts/{c.id}/download",
             "hash_sha256": c.hash_sha256, "generated_at": c.generated_at}
 

@@ -82,7 +82,12 @@ def solicit(body: SolicitIn, db: Session = Depends(get_db)):
 @router.get("")
 def list_solicitations(case_id: str, db: Session = Depends(get_db)):
     rows = db.scalars(select(Solicitation).where(Solicitation.case_id == case_id).order_by(Solicitation.id))
-    return {"case_id": case_id, "solicitations": [_ser(r) for r in rows]}
+    out = []
+    for r in rows:
+        e = db.get(Expert, r.expert_id)
+        out.append({**_ser(r), "expert_nom": e.nom if e else None,
+                    "expert_competences": e.competences if e else []})
+    return {"case_id": case_id, "solicitations": out}
 
 
 @router.put("/{sid}/respond")

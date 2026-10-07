@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import Integer, String, Text
+from sqlalchemy import Integer, String, Text, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
@@ -30,6 +30,23 @@ class Case(Base):
     status: Mapped[str] = mapped_column(String(20), default="en_attente")
     chosen_expert_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[str] = mapped_column(String(40))
+
+
+class MandateSignature(Base):
+    """Simple electronic signature of the mandate by the mandataire."""
+    __tablename__ = "mandate_signatures"
+
+    case_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    signed_by: Mapped[str] = mapped_column(String(100))
+    signed_at: Mapped[str] = mapped_column(String(40))
+
+
+def is_signed(db: Session, case_id: str) -> bool:
+    return db.get(MandateSignature, case_id) is not None
+
+
+class SignIn(BaseModel):
+    signatory_name: str = Field(min_length=2, max_length=100)
 
 
 class Mandataire(BaseModel):
@@ -82,9 +99,37 @@ def create_case(body: CaseIn, db: Session = Depends(get_db)):
     return {"case_id": c.id}
 
 
+@router.get("")
+def list_cases(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    limit = max(1, min(limit, 50))
+    rows = db.scalars(select(Case).order_by(Case.created_at.desc()).limit(limit).offset(offset)).all()
+    signed = set(db.scalars(select(MandateSignature.case_id)))
+    return {
+        "total": db.scalar(select(func.count()).select_from(Case)),
+        "cases": [{**serialize(c), "signed": c.id in signed} for c in rows],
+    }
+
+
 @router.get("/{case_id}")
 def get_case(case_id: str, db: Session = Depends(get_db)):
-    return serialize(get_case_or_404(db, case_id))
+    c = get_case_or_404(db, case_id)
+    return {**serialize(c), "signed": is_signed(db, c.id)}
+
+
+@router.post("/{case_id}/sign")
+def sign_mandate(case_id: str, body: SignIn, db: Session = Depends(get_db)):
+    c = get_case_or_404(db, case_id)
+    existing = db.get(MandateSignature, c.id)
+    if existing:
+        return {"signed": True, "signed_by": existing.signed_by, "signed_at": existing.signed_at}
+    sig = MandateSignature(
+        case_id=c.id, signed_by=body.signatory_name.strip(),
+        signed_at=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+    )
+    db.add(sig)
+    db.commit()
+    log_action(db, "A", "sign_mandate", case_id=c.id, user=sig.signed_by)
+    return {"signed": True, "signed_by": sig.signed_by, "signed_at": sig.signed_at}
 
 
 @router.get("/{case_id}/experts")

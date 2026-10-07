@@ -5,3 +5,4 @@ logs/
 .pytest_cache/
 output/
 node_modules/
+web/dist/

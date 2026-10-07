@@ -29,6 +29,20 @@ def test_state_machine(client):
     assert client.post("/api/v1/solicitations/select", json={"case_id": cid, "expert_id": s_acc["expert_id"]}).status_code == 409
 
 
+def test_contract_requires_signature(client):
+    cid = _chosen_case(client, sign=False)
+    assert client.post("/api/v1/contracts/generate", json={"case_id": cid}).status_code == 409
+    assert client.get(f"/api/v1/cases/{cid}").json()["signed"] is False
+    s = client.post(f"/api/v1/cases/{cid}/sign", json={"signatory_name": "Dupont"})
+    assert s.status_code == 200 and client.get(f"/api/v1/cases/{cid}").json()["signed"] is True
+
+
+def test_list_cases(client):
+    client.post("/api/v1/cases", json=MANDAT_FRAUDE)
+    r = client.get("/api/v1/cases?limit=5").json()
+    assert r["total"] >= 1 and len(r["cases"]) <= 5 and "signed" in r["cases"][0]
+
+
 def test_contract_requires_chosen_expert(client):
     cid = client.post("/api/v1/cases", json=MANDAT_FRAUDE).json()["case_id"]
     assert client.post("/api/v1/contracts/generate", json={"case_id": cid}).status_code == 409
@@ -38,13 +52,15 @@ def test_tex_escaping():
     assert tex(r"\input{/etc/passwd} & 50% $x_1") == r"\textbackslash{}input\{/etc/passwd\} \& 50\% \$x\_1"
 
 
-def _chosen_case(client, description=None):
+def _chosen_case(client, description=None, sign=True):
     body = {**MANDAT_FRAUDE, **({"description": description} if description else {})}
     cid = client.post("/api/v1/cases", json=body).json()["case_id"]
     eid = client.get(f"/api/v1/cases/{cid}/experts").json()["experts"][0]["id"]
     sid = client.post("/api/v1/solicitations", json={"case_id": cid, "expert_ids": [eid]}).json()["solicitations"][0]["id"]
     client.put(f"/api/v1/solicitations/{sid}/respond", json={"status": "accepted"})
     client.post("/api/v1/solicitations/select", json={"case_id": cid, "expert_id": eid})
+    if sign:
+        client.post(f"/api/v1/cases/{cid}/sign", json={"signatory_name": "Dupont"})
     return cid
 
 
@@ -58,6 +74,7 @@ def test_contract_pdf_and_hash(client):
     assert len(data["hash_sha256"]) == 64
     pdf = client.get(data["pdf_url"])
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+    assert client.get(f"/api/v1/contracts?case_id={cid}").json()["contract_id"] == data["contract_id"]
 
 
 @pytest.mark.skipif(__import__("shutil").which("pdflatex") is None, reason="pdflatex not installed")
