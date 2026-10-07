@@ -52,6 +52,68 @@ export interface NewCase {
   mandataire: { nom: string; fonction: string };
 }
 
+export interface Entities {
+  personnes: string[];
+  lieux: string[];
+  dates: string[];
+  dates_iso: string[];
+  montants: string[];
+  montants_valeurs: number[];
+  heures: string[];
+}
+
+export interface Incoherence {
+  type: "temporelle" | "geographique" | "factuelle";
+  severity: "haute" | "moyenne" | "basse";
+  description: string;
+  pv_references: string[];
+  evidence: { pv_id: string; excerpt: string }[];
+}
+
+export interface PvAnalysis {
+  pv_id: string;
+  entities: Entities;
+  incoherences: Incoherence[];
+  score_coherence: number;
+  sha256: string;
+  analyzed_at: string;
+  duration_ms: number;
+}
+
+export interface PvReport {
+  case_id: string;
+  pvs: { pv_id: string; witness_name: string; sha256: string; entities: Entities }[];
+  incoherences: Incoherence[];
+  score_coherence: number;
+}
+
+export interface Mission {
+  case_id: string;
+  case_type: CaseType;
+  priority: Priority;
+  status: CaseStatus;
+  created_at: string;
+  expert: { id: number; nom: string };
+  pv_count: number;
+  incoherence_count: number;
+  high_severity_count: number;
+  score_coherence: number | null;
+  last_pv_at: string | null;
+}
+
+export interface MissionPrep {
+  questions: string[];
+  suggested_witnesses: string[];
+  checklist: string[];
+  guide_pdf_url: string;
+}
+
+export const INCOHERENCE_LABEL: Record<Incoherence["type"], string> = {
+  temporelle: "Temporelle",
+  geographique: "Geographique",
+  factuelle: "Factuelle",
+};
+
 export const CASE_TYPE_LABEL: Record<CaseType, string> = {
   fraude_bancaire: "Fraude bancaire",
   intrusion_reseau: "Intrusion reseau",
@@ -96,4 +158,13 @@ export const api = {
         if (axios.isAxiosError(e) && e.response?.status === 404) return null;
         throw e;
       }),
+  missions: (expertId?: number) =>
+    http
+      .get<{ total: number; missions: Mission[] }>("/pv/missions", { params: expertId ? { expert_id: expertId } : {} })
+      .then((r) => r.data.missions),
+  prepareMission: (case_id: string) => http.post<MissionPrep>("/mission/prepare", { case_id }).then((r) => r.data),
+  analyzePv: (body: { case_id: string; pv_id: string; pv_text: string; witness_name: string; pseudonymize: boolean }) =>
+    http.post<PvAnalysis>("/pv/analyze", body).then((r) => r.data),
+  pvReport: (case_id: string, pseudonymize: boolean) =>
+    http.get<PvReport>("/pv/report", { params: { case_id, pseudonymize } }).then((r) => r.data),
 };

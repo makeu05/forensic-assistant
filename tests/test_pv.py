@@ -167,3 +167,23 @@ def test_api_validation_and_errors(client, case_id):
         "case_id": "nope", "pv_id": "x1", "pv_text": pv["text"], "witness_name": "Test Test"}).status_code == 404
     assert _post(client, case_id, {**pv, "pv_id": "../evil"}).status_code == 422
     assert _post(client, case_id, {**pv, "text": "trop court"}).status_code == 422
+
+
+def test_api_missions_dashboard_lists_only_cases_with_chosen_expert(client):
+    new_case = client.post("/api/v1/cases", json=MANDAT_FRAUDE).json()["case_id"]
+    before = client.get("/api/v1/pv/missions").json()
+    assert new_case not in [m["case_id"] for m in before["missions"]]
+
+    expert_id = client.get(f"/api/v1/cases/{new_case}/experts").json()["experts"][0]["id"]
+    client.post("/api/v1/solicitations", json={"case_id": new_case, "expert_ids": [expert_id]})
+    sol = client.get(f"/api/v1/solicitations?case_id={new_case}").json()["solicitations"][0]["id"]
+    client.put(f"/api/v1/solicitations/{sol}/respond", json={"status": "accepted"})
+    client.post("/api/v1/solicitations/select", json={"case_id": new_case, "expert_id": expert_id})
+    _post(client, new_case, DATASET["pvs"][0])
+    _post(client, new_case, DATASET["pvs"][1])
+
+    mine = {m["case_id"]: m for m in client.get(f"/api/v1/pv/missions?expert_id={expert_id}").json()["missions"]}
+    m = mine[new_case]
+    assert (m["pv_count"], m["incoherence_count"], m["high_severity_count"], m["score_coherence"]) == (2, 1, 1, 0.8)
+    assert m["expert"]["id"] == expert_id
+    assert client.get("/api/v1/pv/missions?expert_id=999999").json()["total"] == 0

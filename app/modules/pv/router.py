@@ -10,8 +10,9 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
 from app.modules.audit.service import log_action, sha256_file
-from app.modules.cases.router import get_case_or_404
+from app.modules.cases.router import Case, get_case_or_404
 from app.modules.contracts.router import output_dir
+from app.modules.matching.service import Expert
 from app.modules.pv.nlp import analyze_text, fold, person_key
 from app.modules.pv.rules import detect
 
@@ -145,3 +146,25 @@ def report(case_id: str, pseudonymize: bool = False, db: Session = Depends(get_d
                     "entities": json.loads(p.analysis)["entities"]} for p in pvs],
            "incoherences": incs, "score_coherence": _score(len(incs))}
     return _mask(out, _pseudonymizer(pvs)) if pseudonymize else out
+
+
+@router.get("/missions")
+def missions(expert_id: int | None = None, db: Session = Depends(get_db)):
+    """Investigator dashboard: every case with a chosen expert, plus PV and inconsistency stats."""
+    query = select(Case, Expert).join(Expert, Expert.id == Case.chosen_expert_id).order_by(Case.created_at.desc())
+    if expert_id is not None:
+        query = query.where(Case.chosen_expert_id == expert_id)
+    rows = []
+    for case, expert in db.execute(query):
+        pvs = _case_pvs(db, case.id)
+        incs = detect(_all_facts(pvs))
+        rows.append({
+            "case_id": case.id, "case_type": case.case_type, "priority": case.priority,
+            "status": case.status, "created_at": case.created_at,
+            "expert": {"id": expert.id, "nom": expert.nom},
+            "pv_count": len(pvs), "incoherence_count": len(incs),
+            "high_severity_count": sum(1 for i in incs if i["severity"] == "haute"),
+            "score_coherence": _score(len(incs)) if pvs else None,
+            "last_pv_at": max((p.analyzed_at for p in pvs), default=None),
+        })
+    return {"total": len(rows), "missions": rows}
