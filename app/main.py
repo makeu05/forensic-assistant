@@ -6,8 +6,11 @@ from fastapi import APIRouter, FastAPI
 from app.db import Base, SessionLocal, engine
 from app.modules.audit.router import router as audit_router
 from app.modules.cases.router import router as cases_router
+from app.modules.contracts.router import router as contracts_router
 from app.modules.matching.router import router as matching_router
 from app.modules.matching.seed import seed_experts
+from app.modules.mission.router import router as mission_router
+from app.modules.workflow.router import router as workflow_router
 
 
 @asynccontextmanager
@@ -28,7 +31,7 @@ def health():
     return {"status": "ok"}
 
 
-for r in (audit_router, cases_router, matching_router):
+for r in (audit_router, cases_router, matching_router, workflow_router, contracts_router, mission_router):
     api.include_router(r)
 
 app.include_router(api)

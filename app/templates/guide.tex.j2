@@ -1,0 +1,36 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amssymb}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\begin{document}
+\begin{center}
+{\LARGE\bfseries Guide m\'ethodologique}\\[1ex]
+Dossier : \texttt{<< case_id | tex >>} -- << case_type | tex >>
+\end{center}
+
+\section*{Questions d'audition}
+\begin{enumerate}
+<% for q in questions %>
+\item << q | tex >>
+<% endfor %>
+\end{enumerate}
+
+\section*{T\'emoins et suspects sugg\'er\'es}
+<% if suggested_witnesses %>
+\begin{itemize}
+<% for w in suggested_witnesses %>
+\item << w | tex >>
+<% endfor %>
+\end{itemize}
+<% else %>
+Aucun t\'emoin sugg\'er\'e automatiquement pour ce dossier.
+<% endif %>
+
+\section*{Check-list}
+\begin{itemize}
+<% for c in checklist %>
+\item[$\square$] << c | tex >>
+<% endfor %>
+\end{itemize}
+\end{document}

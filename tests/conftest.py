@@ -4,6 +4,7 @@ import tempfile
 _tmp = tempfile.mkdtemp()
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
 os.environ["AUDIT_LOG_PATH"] = f"{_tmp}/audit.jsonl"
+os.environ["OUTPUT_DIR"] = f"{_tmp}/output"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
