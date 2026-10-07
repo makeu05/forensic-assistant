@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.db
+logs/
+.pytest_cache/
+output/
+node_modules/
