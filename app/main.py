@@ -1,9 +1,11 @@
 """Gateway: single entry point mounting every module under /api/v1."""
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI
 
 from app.core.security import security_middleware
+from app.modules.auth import service as auth_service
 from app.db import Base, SessionLocal, ensure_columns, engine
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import current_user, router as auth_router
@@ -26,13 +28,21 @@ from app.modules.xai.router import router as xai_router
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(engine)
     ensure_columns(engine)
-    with SessionLocal() as db:
-        seed_experts(db)
+    auth_service.get_secret()  # fail at startup, not at the first login, if production has no JWT_SECRET
+    if os.getenv("LOCARD_SEED_DEMO", "1") != "0":  # demo experts are for development, never for production
+        with SessionLocal() as db:
+            seed_experts(db)
     get_nlp()  # load spaCy once at startup so the first PV request is not slow
     yield
 
 
-app = FastAPI(title="Locard", description="Assistant intelligent d'investigation numerique", version="0.1.0", lifespan=lifespan)
+PRODUCTION = os.getenv("LOCARD_ENV") == "production"
+DOCS = not PRODUCTION or os.getenv("LOCARD_DOCS") == "1"  # Swagger is off in production unless asked for
+
+app = FastAPI(
+    title="Locard", description="Assistant intelligent d'investigation numerique", version="0.1.0", lifespan=lifespan,
+    docs_url="/docs" if DOCS else None, redoc_url="/redoc" if DOCS else None, openapi_url="/openapi.json" if DOCS else None,
+)
 
 app.middleware("http")(security_middleware)
 

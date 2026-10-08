@@ -1,13 +1,17 @@
 """Gateway protections: rate limiting and security headers.
 
+Behind a reverse proxy (Caddy, nginx) every request arrives from the proxy's address, which would put all users in
+one bucket. TRUSTED_PROXIES (comma-separated IPs or CIDR ranges) names the proxies whose X-Forwarded-For header
+is believed; from such a peer the real client is the first address in the header that is not itself a trusted
+proxy. From any other peer the header is ignored, since anyone can forge it.
+
 Rate limits (sliding window of 60 seconds, kept in memory, so they are per API process):
 - RATE_LIMIT_PER_MIN        default 100. One bucket per logged-in token, or per IP for anonymous callers.
 - LOGIN_LIMIT_PER_MIN       default 10. Per IP, for login, registration and account activation, which are
                             the endpoints an attacker would hammer to guess passwords or tokens.
-The client address is the direct peer address. X-Forwarded-For is deliberately not trusted: any caller can
-forge it. Behind a reverse proxy, set the limits on the proxy as well.
 """
 import hashlib
+import ipaddress
 import os
 import threading
 import time
@@ -54,8 +58,41 @@ def _limit(name: str, default: int) -> int:
         return default
 
 
+def _trusted_networks() -> list:
+    nets = []
+    for part in os.getenv("TRUSTED_PROXIES", "").split(","):
+        if part.strip():
+            try:
+                nets.append(ipaddress.ip_network(part.strip(), strict=False))
+            except ValueError:
+                pass  # a typo must not open a hole: an unreadable entry trusts nothing
+    return nets
+
+
+def _is_trusted(address: str, nets: list) -> bool:
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    return any(ip in net for net in nets)
+
+
+def client_ip(request: Request) -> str:
+    """The caller's address: the direct peer, unless that peer is a trusted proxy that vouches for another one."""
+    peer = request.client.host if request.client else "unknown"
+    nets = _trusted_networks()
+    forwarded = request.headers.get("x-forwarded-for")
+    if nets and forwarded and _is_trusted(peer, nets):
+        chain = [a.strip() for a in forwarded.split(",") if a.strip()]
+        for address in reversed(chain):
+            if not _is_trusted(address, nets):
+                return address
+        return chain[0] if chain else peer
+    return peer
+
+
 def _bucket(request: Request) -> tuple[str, int]:
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip(request)
     if request.url.path in AUTH_PATHS:
         return f"auth:{ip}", _limit("LOGIN_LIMIT_PER_MIN", 10)
     token = request.headers.get("authorization")

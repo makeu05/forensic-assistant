@@ -1,0 +1,33 @@
+# Locard API: FastAPI + spaCy French model + LaTeX (for the PDF documents).
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    LOCARD_ENV=production OUTPUT_DIR=/data/output AUDIT_LOG_PATH=/data/logs/audit.jsonl
+
+# LaTeX: only the packages the templates use (checked below, so a missing one fails the build, not a user).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-recommended texlive-fonts-recommended \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt \
+ && python -m spacy download fr_core_news_lg
+
+COPY deploy/latex-check.tex /tmp/latex-check.tex
+RUN cd /tmp && pdflatex -interaction=nonstopmode -halt-on-error latex-check.tex > /dev/null && rm -f latex-check.*
+
+COPY app ./app
+
+# A non-root user owns the data folder; a named volume mounted on /data inherits this ownership.
+RUN useradd --create-home --uid 1000 locard \
+ && mkdir -p /data/output /data/logs \
+ && chown -R locard:locard /data /app
+USER locard
+
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)"
+
+# One worker: the spaCy model is large and the rate limiter keeps its counters in memory.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

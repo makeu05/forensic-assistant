@@ -2,7 +2,8 @@ import os
 import tempfile
 
 _tmp = tempfile.mkdtemp()
-os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
+# TEST_DATABASE_URL runs the whole suite on another database (e.g. PostgreSQL). It must be empty.
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL") or f"sqlite:///{_tmp}/test.db"
 os.environ["AUDIT_LOG_PATH"] = f"{_tmp}/audit.jsonl"
 os.environ["OUTPUT_DIR"] = f"{_tmp}/output"
 os.environ["LOCARD_NO_DOTENV"] = "1"  # never load a developer's real .env (SMTP credentials!) in tests

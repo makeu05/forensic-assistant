@@ -1,0 +1,59 @@
+# Locard: PostgreSQL + API + web (Caddy, HTTPS). Settings come from the `.env` file next to this one
+# (copy .env.production.example). Start with:  docker compose up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-locard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-locard}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-locard} -d ${POSTGRES_DB:-locard}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-locard}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-locard}
+      LOCARD_ENV: production
+      LOCARD_SEED_DEMO: "0"        # never create the fake demo experts on a live server
+      TRUSTED_PROXIES: "172.16.0.0/12,10.0.0.0/8,192.168.0.0/16"   # the Docker network: trust Caddy's X-Forwarded-For
+    volumes:
+      - locard-data:/data          # generated PDFs, stored PVs and the audit log file
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"                     # reachable by Caddy only, never published on the host
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data           # the HTTPS certificates: keep them across restarts
+      - caddy-config:/config
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  locard-data:
+  caddy-data:
+  caddy-config:

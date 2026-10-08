@@ -4,6 +4,8 @@
     python -m app.cli create-user --email a@b.c --name "A B" --role investigateur --expert-id 12
     python -m app.cli list-experts --search dubois
     python -m app.cli rotate-logs --max-mb 100
+    python -m app.cli import-experts experts.csv          (dry run; add --apply)
+    python -m app.cli remove-demo-experts                 (dry run; add --apply)
     python -m app.cli purge-expired --months 6          (dry run; add --apply to delete)
     python -m app.cli check-mail
     python -m app.cli send-test-mail --to someone@example.com
@@ -109,6 +111,43 @@ def purge_expired(args: argparse.Namespace) -> int:
     return 0
 
 
+def import_experts_cmd(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from app.modules.matching.importer import import_experts, parse_csv
+
+    path = Path(args.csv)
+    if not path.is_file():
+        print(f"File not found: {path}", file=sys.stderr)
+        return 1
+    result = parse_csv(path.read_text(encoding="utf-8-sig"))
+    for problem in result.errors:
+        print(f"  ! {problem}", file=sys.stderr)
+    if result.errors and not args.partial:
+        print("Nothing imported: fix the lines above, or use --partial to import the valid ones.", file=sys.stderr)
+        return 1
+    Base.metadata.create_all(engine)
+    with SessionLocal() as db:
+        result = import_experts(db, result, apply=args.apply)
+    verb = "Imported" if args.apply else "Would import"
+    print(f"{verb} {len(result.rows)} expert(s); {len(result.skipped)} already in the base; {len(result.errors)} invalid line(s).")
+    if not args.apply:
+        print("Dry run: add --apply to write them.")
+    return 0
+
+
+def remove_demo(args: argparse.Namespace) -> int:
+    from app.modules.matching.importer import remove_demo_experts
+
+    with SessionLocal() as db:
+        removed = remove_demo_experts(db, apply=args.apply)
+    verb = "Removed" if args.apply else "Would remove"
+    print(f"{verb} {len(removed)} demo expert(s) (@experts.example) that no account or request refers to.")
+    if not args.apply:
+        print("Dry run: add --apply to delete them.")
+    return 0
+
+
 def send_test(args: argparse.Namespace) -> int:
     subject, body = test_mail()
     try:
@@ -139,6 +178,14 @@ def main() -> int:
     r = sub.add_parser("rotate-logs")
     r.add_argument("--max-mb", type=float, default=100.0)
     r.set_defaults(run=rotate_logs)
+    ie = sub.add_parser("import-experts")
+    ie.add_argument("csv")
+    ie.add_argument("--apply", action="store_true", help="really write (default is a dry run)")
+    ie.add_argument("--partial", action="store_true", help="import the valid lines even if some are invalid")
+    ie.set_defaults(run=import_experts_cmd)
+    rd = sub.add_parser("remove-demo-experts")
+    rd.add_argument("--apply", action="store_true", help="really delete (default is a dry run)")
+    rd.set_defaults(run=remove_demo)
     pg = sub.add_parser("purge-expired")
     pg.add_argument("--months", type=float, default=6.0)
     pg.add_argument("--apply", action="store_true", help="really delete (default is a dry run)")

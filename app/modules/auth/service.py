@@ -67,6 +67,12 @@ def parse(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 
+def get_secret() -> str:
+    """The signing secret. Production (LOCARD_ENV=production) refuses to run without JWT_SECRET: a random
+    secret there would log everybody out at every restart and differ between server processes."""
+    return _secret()
+
+
 @lru_cache(maxsize=1)
 def _secret() -> str:
     env = os.getenv("JWT_SECRET")
@@ -74,6 +80,8 @@ def _secret() -> str:
         if len(env) < 32:
             raise RuntimeError("JWT_SECRET must be at least 32 characters")
         return env
+    if os.getenv("LOCARD_ENV") == "production":
+        raise RuntimeError("JWT_SECRET is required when LOCARD_ENV=production")
     log.warning("JWT_SECRET is not set: using a random secret, all sessions end when the server restarts")
     return secrets.token_urlsafe(48)
 

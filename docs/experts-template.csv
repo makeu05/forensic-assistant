@@ -1,0 +1,3 @@
+nom,email,competences,bio,annees_experience,disponibilite
+Camille Laurent,camille.laurent@cabinet.example,forensic_bancaire|analyse_logs|fraude,Expert judiciaire en fraude bancaire et analyse de virements suspects,12,oui
+Nabil Haddad,nabil.haddad@cabinet.example,forensic_reseau|intrusion|analyse_reseau,Investigation d'intrusions réseau et analyse de trafic,8,oui
