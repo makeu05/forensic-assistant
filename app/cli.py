@@ -4,6 +4,7 @@
     python -m app.cli create-user --email a@b.c --name "A B" --role investigateur --expert-id 12
     python -m app.cli list-experts --search dubois
     python -m app.cli rotate-logs --max-mb 100
+    python -m app.cli purge-expired --months 6          (dry run; add --apply to delete)
     python -m app.cli check-mail
     python -m app.cli send-test-mail --to someone@example.com
 
@@ -91,6 +92,23 @@ def rotate_logs(args: argparse.Namespace) -> int:
     return 0
 
 
+def purge_expired(args: argparse.Namespace) -> int:
+    from app.modules.privacy.retention import purge
+
+    with SessionLocal() as db:
+        found = purge(db, args.months, apply=args.apply)
+    if not found:
+        print(f"Nothing to purge: no mission ended more than {args.months:g} months ago still holds interview data.")
+        return 0
+    verb = "Deleted" if args.apply else "Would delete"
+    for item in found:
+        print(f"{verb} for case {item.case_id[:8]} (report of {item.report_at[:10]}): "
+              f"{item.pvs} PV, {item.tech_reports} technical report(s), {len(item.files)} file(s)/folder(s)")
+    if not args.apply:
+        print("Dry run: nothing was changed. Add --apply to delete. The audit trail is never touched.")
+    return 0
+
+
 def send_test(args: argparse.Namespace) -> int:
     subject, body = test_mail()
     try:
@@ -121,6 +139,10 @@ def main() -> int:
     r = sub.add_parser("rotate-logs")
     r.add_argument("--max-mb", type=float, default=100.0)
     r.set_defaults(run=rotate_logs)
+    pg = sub.add_parser("purge-expired")
+    pg.add_argument("--months", type=float, default=6.0)
+    pg.add_argument("--apply", action="store_true", help="really delete (default is a dry run)")
+    pg.set_defaults(run=purge_expired)
     sub.add_parser("check-mail").set_defaults(run=check_mail)
     t = sub.add_parser("send-test-mail")
     t.add_argument("--to", required=True)

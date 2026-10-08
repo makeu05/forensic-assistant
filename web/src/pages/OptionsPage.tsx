@@ -2,8 +2,11 @@ import { useNavigate } from "react-router-dom";
 import { Box, Button, Card, FormControlLabel, Switch, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
+import DownloadIcon from "@mui/icons-material/FileDownloadOutlined";
 import LogoutIcon from "@mui/icons-material/LogoutOutlined";
+import { downloadFile } from "../api";
 import { useAuth } from "../auth";
+import { frenchError } from "../format";
 import { useSettings } from "../settings";
 import { PageHeader } from "../components/ui/Page";
 import { useToast } from "../components/ui/Toast";
@@ -37,6 +40,19 @@ export default function OptionsPage() {
             à l'écran et dans les rapports que vous générez. Le même nom reçoit toujours le même identifiant, pour que le raisonnement reste lisible.
             Les procès-verbaux enregistrés ne sont pas modifiés : seul l'affichage et les exports changent.
           </Typography>
+        </Option>
+
+        <Option title="Mes données">
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Téléchargez un fichier JSON avec les informations de votre compte, vos dossiers, les demandes qui vous sont adressées
+            et la liste de vos actions enregistrées. Les déclarations des témoins et les données des autres utilisateurs n'y figurent pas.
+          </Typography>
+          <Button variant="outlined" startIcon={<DownloadIcon />}
+            onClick={() => downloadFile("/api/v1/privacy/export", "locard-mes-donnees.json")
+              .then(() => toast.success("Export téléchargé."))
+              .catch((e) => toast.error(frenchError(e)))}>
+            Télécharger mes données
+          </Button>
         </Option>
 
         <Option title="Apparence">
