@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI
 
+from app.core.security import security_middleware
 from app.db import Base, SessionLocal, ensure_columns, engine
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import current_user, router as auth_router
@@ -30,6 +31,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Locard", description="Assistant intelligent d'investigation numerique", version="0.1.0", lifespan=lifespan)
+
+app.middleware("http")(security_middleware)
 
 api = APIRouter(prefix="/api/v1")
 

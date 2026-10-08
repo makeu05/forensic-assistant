@@ -3,6 +3,7 @@
     python -m app.cli create-user --email you@example.com --name "Your Name" --role mandataire
     python -m app.cli create-user --email a@b.c --name "A B" --role investigateur --expert-id 12
     python -m app.cli list-experts --search dubois
+    python -m app.cli rotate-logs --max-mb 100
     python -m app.cli check-mail
     python -m app.cli send-test-mail --to someone@example.com
 
@@ -20,6 +21,7 @@ import sys
 
 from sqlalchemy import select
 
+from app.modules.audit.service import _log_path, rotate_log
 from app.core.mail import check_connection, deliver, hold_reason, smtp_settings, test_mail
 from app.db import Base, SessionLocal, engine, ensure_columns
 from app.modules.auth import invitations  # noqa: F401  (registers the invitations table)
@@ -78,6 +80,17 @@ def check_mail(_: argparse.Namespace) -> int:
     return 0
 
 
+def rotate_logs(args: argparse.Namespace) -> int:
+    path = _log_path()
+    archive = rotate_log(path, int(args.max_mb * 1024 * 1024))
+    if archive:
+        print(f"Archived {path.name} to {archive.name}. The new file starts with a marker holding the archive's SHA-256.")
+    else:
+        size = path.stat().st_size if path.exists() else 0
+        print(f"No rotation needed: {path} is {size / 1048576:.2f} MB (limit {args.max_mb} MB). Use --max-mb 0 to force it.")
+    return 0
+
+
 def send_test(args: argparse.Namespace) -> int:
     subject, body = test_mail()
     try:
@@ -105,6 +118,9 @@ def main() -> int:
     ls = sub.add_parser("list-experts")
     ls.add_argument("--search")
     ls.set_defaults(run=list_experts)
+    r = sub.add_parser("rotate-logs")
+    r.add_argument("--max-mb", type=float, default=100.0)
+    r.set_defaults(run=rotate_logs)
     sub.add_parser("check-mail").set_defaults(run=check_mail)
     t = sub.add_parser("send-test-mail")
     t.add_argument("--to", required=True)
