@@ -18,6 +18,7 @@ from app.modules.mission.router import router as mission_router
 from app.modules.pv.nlp import get_nlp
 from app.modules.privacy.router import router as privacy_router
 from app.modules.pv.router import router as pv_router
+from app.modules.pv.semantic_api import router as semantic_router
 from app.modules.reports.final import router as final_report_router
 from app.modules.reports.tech import router as tech_report_router
 from app.modules.workflow.router import router as workflow_router
@@ -57,7 +58,7 @@ def health():
 api.include_router(auth_router)  # public: register, login, refresh
 # Every other router requires a valid access token, whatever its own endpoints declare.
 for r in (audit_router, cases_router, matching_router, workflow_router, contracts_router, mission_router, pv_router,
-          methodology_router, tech_report_router, final_report_router, privacy_router, xai_router):
+          methodology_router, tech_report_router, final_report_router, privacy_router, xai_router, semantic_router):
     api.include_router(r, dependencies=[Depends(current_user)])
 
 app.include_router(api)

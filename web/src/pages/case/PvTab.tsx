@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Card, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, LinearProgress, Stack,
+  Alert, Box, Button, Card, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, LinearProgress, Stack,
   Switch, Tab, Tabs, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -19,20 +19,12 @@ import ScoreRing from "../../components/ui/ScoreRing";
 import SeverityChip from "../../components/ui/SeverityChip";
 import { useToast } from "../../components/ui/Toast";
 import { useCase } from "./CaseLayout";
+import Excerpt from "./Excerpt";
+import SemanticCard from "./SemanticCard";
 import { EXAMPLE_PVS } from "./examples";
 
 const MAX_FILE_BYTES = 1_000_000;
 const PV_ID = /^[A-Za-z0-9_-]{1,40}$/;
-
-function Excerpt({ pv, text }: { pv: string; text: string }) {
-  const p = useTokens();
-  return (
-    <Box sx={{ flex: 1, minWidth: 0, p: 1.5, borderRadius: 2, bgcolor: p.surfaceAlt, border: `1px solid ${p.border}` }}>
-      <Chip size="small" label={`PV ${pv}`} sx={{ mb: 1, bgcolor: p.primarySoft, color: p.primarySoftText }} />
-      <Typography variant="body2" component="blockquote" sx={{ m: 0, fontStyle: "italic", wordBreak: "break-word" }}>« {text} »</Typography>
-    </Box>
-  );
-}
 
 /** One detected inconsistency: the two conflicting excerpts side by side, and a plain-language reason. */
 function IncoherenceCard({ inc }: { inc: Incoherence }) {
@@ -215,6 +207,7 @@ export default function PvTab() {
           {detail.error && <Alert severity="error" sx={{ mb: 2 }}>{detail.error}</Alert>}
           {detail.loading && !detail.data && <SkeletonCards count={1} height={300} />}
           {detail.data && <PvView detail={detail.data} />}
+          <SemanticCard caseId={c.case_id} pseudonymize={pseudonymize} pvCount={list.length} />
         </>
       )}
       <AddPvDialog open={adding} onClose={() => setAdding(false)} onAdded={added} existing={list.length} />

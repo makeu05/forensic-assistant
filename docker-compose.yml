@@ -20,6 +20,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+      args:
+        ML: ${LOCARD_ML_BUILD:-0}  # 1 bakes the language model for contradiction suggestions into the image (about 1 GB more)
     restart: unless-stopped
     env_file: .env
     environment:

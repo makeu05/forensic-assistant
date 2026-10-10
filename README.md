@@ -55,7 +55,7 @@ The specification splits the product into modules A to K. This is where each one
 | C | Contracts | LaTeX + Jinja2 to PDF, SHA-256, injection-safe | `app/modules/contracts` |
 | D | Acceptance workflow | Pending, accepted, refused, chosen (state machine) | `app/modules/workflow` |
 | E | Mission preparation | Questions, checklist, guide PDF | `app/modules/mission` |
-| F | PV analysis | spaCy for people and places, rules for dates, amounts and contradictions | `app/modules/pv` |
+| F | PV analysis | spaCy for people and places, rules for dates, amounts and contradictions, plus an optional language model that suggests more contradictions | `app/modules/pv` |
 | G | Hypotheses and methodology | Hypotheses from the case and from the inconsistencies, ordered plan of actions | `app/modules/methodology` |
 | H | Technical reports | Scores each report, builds the optimal resolution chain | `app/modules/reports/tech.py` |
 | I | Final report | Versioned LaTeX PDF with chain of custody | `app/modules/reports/final.py` |
@@ -106,6 +106,15 @@ spaCy's French model finds **people and places**. It has no date or amount label
 
 These are **aids for the expert, not conclusions**. They only fire on explicit dates or weekdays, named people and known cities, and are deliberately cautious. Details and limits are in the module docstrings (`app/modules/pv/rules.py`).
 
+#### Optional: contradictions suggested by a language model
+
+The rules only recognise a few phrasings. On 14 planted contradictions between whole statements they found none, because the sentences were worded differently from any rule. So Locard can also ask a French natural language inference model ([DistilCamemBERT](https://huggingface.co/cmarkea/distilcamembert-base-nli), MIT licence, 272 MB) whether two sentences contradict each other.
+
+- **How it runs.** The expert presses "Lancer l'analyse" under the statements. A background job picks sentence pairs that share words, scores them in both directions, and keeps at most 3 per pair of statements, only at a score of 0.95 or more. On a laptop CPU a case takes seconds. Results are stored and marked out of date if a PV is added later.
+- **How it is shown.** As "Suggestion automatique" cards, **apart from the rule-based findings and outside the coherence score**. The model cannot tell a real contradiction from a pair that only looks contradictory (a different time, person or object), so every suggestion is for the expert to verify. Names can be masked like everywhere else, and each run is written to the audit log.
+- **What it achieves.** On synthetic statements written for the experiment: 6 of 14 planted contradictions found and 2 false suggestions (about 43% recall and 75% precision), against 0 of 14 for the rules. These figures come from a small, hand-made set and are not an accuracy claim. The whole experiment, including a second model that was tested and left out, is in [`experiments/pv_nli/`](experiments/pv_nli/README.md).
+- **It is optional.** Without `torch` and `transformers` (or with `LOCARD_ML=0`) the card does not appear and nothing else changes. See "First setup" for how to install it.
+
 ---
 
 ## Run it on your computer
@@ -133,6 +142,13 @@ cd ..
 ```
 
 (On Linux or macOS the interpreter is `.venv/bin/python`.)
+
+**Optional: the language model for contradiction suggestions** (about 1 GB of disk; the model itself downloads on first use):
+
+```powershell
+.\.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+.\.venv\Scripts\python -m pip install -r requirements-ml.txt
+```
 
 ### Start
 
@@ -199,6 +215,10 @@ Everything is read from environment variables, or from a `.env` file at the proj
 | `LOCARD_ENV` | development | Set to `production` to require `JWT_SECRET` and hide Swagger |
 | `LOCARD_DOCS` | off in production | `1` shows Swagger in production |
 | `LOCARD_SEED_DEMO` | `1` | `0` skips the fake demo experts (production) |
+| `LOCARD_ML` | auto | `0` switches off the language-model suggestions even when the libraries are installed |
+| `LOCARD_NLI_MODEL` | `cmarkea/distilcamembert-base-nli` | Hugging Face model id. `MoritzLaurer/mDeBERTa-v3-base-mnli-xnli` works too, but is 47 times slower for no better ranking on whole statements. |
+| `LOCARD_NLI_MIN_SCORE` `LOCARD_NLI_CAP` | `0.95` `3` | Lowest score shown, and suggestions kept per pair of statements |
+| `HF_HUB_OFFLINE` | none | `1` once the model is downloaded: never contact Hugging Face again |
 | `BCRYPT_ROUNDS` | `12` | Password hashing cost |
 
 `.env.example` (development) and `.env.production.example` (server) show the format.
@@ -229,7 +249,7 @@ All run as `python -m app.cli <command>`.
 .\.venv\Scripts\python -m pytest -q --cov=app             # with coverage
 ```
 
-At the last full run: **143 tests passed, 89% of the code covered.** They cover accounts and access rules (including attack cases: forged, expired and `alg: none` tokens, reused refresh tokens, probing other users' cases), the invitation e-mails (against a fake authenticated mail server), the PV analysis (precision and recall on an annotated set), modules G, H and I, the PDF generation, the audit chain and its rotation, RGPD export and purge, rate limiting, and the production start-up checks.
+At the last full run: **165 tests passed, 90% of the code covered.** They cover accounts and access rules (including attack cases: forged, expired and `alg: none` tokens, reused refresh tokens, probing other users' cases), the invitation e-mails (against a fake authenticated mail server), the PV analysis (precision and recall on an annotated set), modules G, H and I, the PDF generation, the audit chain and its rotation, RGPD export and purge, rate limiting, the production start-up checks, and the language-model suggestions (with a stand-in model, plus two tests with the real model that are skipped when it is not installed).
 
 The suite never sends real mail (it loads no `.env`) and uses its own temporary database. To run it on **PostgreSQL**, give it an empty database:
 
@@ -295,7 +315,7 @@ app/
   modules/
     auth/                 accounts, JWT, invitations, access rules
     cases/  matching/  workflow/  contracts/  mission/   modules A to E
-    pv/  methodology/  reports/                          modules F, G, H, I
+    pv/  methodology/  reports/                          modules F (rules and model), G, H, I
     audit/  xai/  privacy/                               modules J, K, and RGPD
   templates/              LaTeX templates (contract, guide, report)
 web/
@@ -303,13 +323,14 @@ web/
   src/components/ui/      reusable components (ScoreRing, HashBadge, EntityHighlighter ...)
   src/pages/              screens; src/pages/case/ holds the six steps
   scripts/                contrast checker
+experiments/pv_nli/       the experiment behind the language-model suggestions (data, scripts, results, decision)
 tests/                    pytest suite and the annotated PV dataset
 docs/                     deployment guide, ISO 27037, expert CSV template, screenshots
 deploy/                   Caddyfile and the LaTeX package check
-Dockerfile.api  Dockerfile.web  docker-compose.yml
+Dockerfile.api  Dockerfile.web  docker-compose.yml     requirements.txt  requirements-ml.txt (optional)
 ```
 
-The API has 42 endpoints, grouped under `/api/v1/` as `auth`, `cases`, `matching`, `solicitations`, `contracts`, `mission`, `pv`, `methodology`, `reports`, `audit`, `xai`, `privacy` and `health`. Swagger lists them all in development.
+The API has 45 endpoints, grouped under `/api/v1/` as `auth`, `cases`, `matching`, `solicitations`, `contracts`, `mission`, `pv`, `semantic`, `methodology`, `reports`, `audit`, `xai`, `privacy` and `health`. Swagger lists them all in development.
 
 ---
 
@@ -318,7 +339,7 @@ The API has 42 endpoints, grouped under `/api/v1/` as `auth`, `cases`, `matching
 Being clear about this matters more than a long feature list.
 
 - **It does not decide.** Inconsistencies and hypotheses are produced by rules. The expert reads, verifies and signs the conclusion.
-- **The PV analysis is rule-based, not machine learning.** It needs explicit dates or weekdays and named people. Its accuracy was measured on a small set of statements written together with the rules (a regression check, not a real accuracy figure). A fair evaluation needs statements nobody tuned the rules on.
+- **The PV analysis is mostly rule-based.** The rules need explicit dates or weekdays and named people, and their accuracy was measured on a small set of statements written together with them (a regression check, not a real accuracy figure). The only machine learning is the optional model that suggests contradictions: it misses more than half of them, is wrong about one suggestion in four, and was measured on synthetic data. A fair evaluation of either needs statements nobody tuned anything on.
 - **Expert matching is keyword similarity** (TF-IDF), not a judgement of skill. It is an aid for the mandataire's choice.
 - **No acquisition of physical evidence** (disk images, memory). Out of scope.
 - **The audit log is tamper-evident, not tamper-proof.** Someone who controls the database and recomputes the whole chain would produce a consistent log. The remedy is an external timestamp, which is not implemented.

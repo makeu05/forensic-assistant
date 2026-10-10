@@ -222,6 +222,34 @@ export interface PvListItem {
   analyzed_at: string;
 }
 
+export interface SemanticSuggestion {
+  pv_a: string;
+  pv_b: string;
+  sentence_a: string;
+  sentence_b: string;
+  score: number;
+  p_ab: number;
+  p_ba: number;
+  shared: string[];
+}
+
+/** The model's suggested contradictions (module F). `status` is none until a run has been started. */
+export interface SemanticResult {
+  available: boolean;
+  reason: string;
+  status: "none" | "running" | "done" | "failed";
+  stale: boolean;
+  model: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+  min_score: number | null;
+  cap: number | null;
+  stats: { pv_pairs?: number; candidates?: number; seconds?: number; suggestions?: number };
+  suggestions: SemanticSuggestion[];
+  disclaimer: string;
+}
+
 export interface PvReport {
   case_id: string;
   pvs: { pv_id: string; witness_name: string; sha256: string; entities: Entities }[];
@@ -405,6 +433,9 @@ export const api = {
     http.get<PvDetail>(`/pv/${pv_id}`, { params: { case_id, pseudonymize } }).then((r) => r.data),
   pvReport: (case_id: string, pseudonymize: boolean) =>
     http.get<PvReport>("/pv/report", { params: { case_id, pseudonymize } }).then((r) => r.data),
+  semanticSuggestions: (case_id: string, pseudonymize: boolean) =>
+    http.get<SemanticResult>("/semantic/suggestions", { params: { case_id, pseudonymize } }).then((r) => r.data),
+  runSemantic: (case_id: string) => http.post<{ status: string }>("/semantic/run", { case_id }).then((r) => r.data),
 
   // methodology (G), technical reports (H), final report (I)
   methodology: (case_id: string) => http.get<Methodology>("/methodology", { params: { case_id } }).then((r) => r.data),

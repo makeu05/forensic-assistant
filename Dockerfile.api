@@ -10,9 +10,20 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt .
+COPY requirements.txt requirements-ml.txt ./
 RUN pip install -r requirements.txt \
  && python -m spacy download fr_core_news_lg
+
+# Optional language-model suggestions for module F (about 1 GB more). Build with:  --build-arg ML=1
+# The CPU build of torch goes first so pip does not fetch the much larger default wheel. The model is
+# downloaded now, into the image, so a running server never needs to reach Hugging Face.
+ARG ML=0
+ENV HF_HOME=/opt/hf
+RUN if [ "$ML" = "1" ]; then \
+      pip install torch --index-url https://download.pytorch.org/whl/cpu \
+   && pip install -r requirements-ml.txt \
+   && python -c "from huggingface_hub import snapshot_download; snapshot_download('cmarkea/distilcamembert-base-nli', allow_patterns=['*.json', '*.model', '*.safetensors'])"; \
+    fi
 
 COPY deploy/latex-check.tex /tmp/latex-check.tex
 RUN cd /tmp && pdflatex -interaction=nonstopmode -halt-on-error latex-check.tex > /dev/null && rm -f latex-check.*

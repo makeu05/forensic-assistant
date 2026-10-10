@@ -110,6 +110,20 @@ docker run --rm -v locard_locard-data:/data -v "$PWD":/backup alpine tar czf /ba
 
 A backup you have never restored is a hope, not a backup: try restoring once on a spare machine.
 
+## Optional: the language model for contradiction suggestions
+
+Locard can suggest contradictions between witness statements with a small language model (see the README, module F).
+It is off by default in the image, which stays small. To include it:
+
+1. Set `LOCARD_ML_BUILD=1` in `.env` (see `.env.production.example`).
+2. Rebuild: `docker compose up -d --build`. This adds about 1 GB (CPU build of PyTorch and the 272 MB model) and a few
+   minutes. The model is downloaded **during the build**, so the running server never contacts Hugging Face.
+3. Check it: the "Suggestions du modèle" card appears under the statements of a case with two or more PVs.
+
+Keep an eye on memory: the model needs about 1 GB of RAM once loaded, on top of spaCy. A 2 GB server is tight; 4 GB is comfortable.
+If the card does not appear, `docker compose exec api python -c "from app.modules.pv import semantic; print(semantic.availability())"`
+says why. This path, like the rest of the Docker files, has not been built yet.
+
 ## Things to know
 
 - **Database changes.** The tables are created when the API first starts. A later version that adds a column

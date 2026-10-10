@@ -1,0 +1,13 @@
+# Optional: the language model that suggests contradictions between witness statements (module F).
+# Locard runs without it; the "Suggestions du modèle" card then reports itself unavailable.
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu     # CPU build, about 200 MB (the default wheel is far larger)
+#   pip install -r requirements-ml.txt
+#
+# The model (cmarkea/distilcamembert-base-nli, MIT, 272 MB) downloads from Hugging Face on first use,
+# or at image build time with --build-arg ML=1. See docs/DEPLOY.md.
+-r requirements.txt
+torch>=2.2
+transformers>=4.40
+sentencepiece>=0.2      # the CamemBERT tokenizer; without it the model fails to load
+protobuf>=4.25          # needed by the tokenizer conversion
