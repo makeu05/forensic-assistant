@@ -52,7 +52,7 @@ function CaseCard({ c }: { c: CaseData }) {
               {c.description}
             </Typography>
           </Box>
-          <PriorityChip priority={c.priority} />
+          <Box sx={{ alignSelf: "flex-start" }}><PriorityChip priority={c.priority} /></Box>
           <Box sx={{ mt: "auto" }}>
             <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.75 }}>
               <Typography variant="caption" color="text.secondary">{current ? `Étape en cours : ${current.label}` : "Toutes les étapes sont terminées"}</Typography>

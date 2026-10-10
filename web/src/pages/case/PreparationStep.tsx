@@ -5,7 +5,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import FileDownloadIcon from "@mui/icons-material/FileDownloadOutlined";
-import { api, downloadFile } from "../../api";
+import { api, downloadPdf } from "../../api";
 import { useAuth } from "../../auth";
 import { frenchError } from "../../format";
 import { useStored } from "../../hooks";
@@ -142,7 +142,7 @@ export default function PreparationStep() {
         case_id: c.case_id, questions: prep.questions.map((q) => q.text), suggested_witnesses: prep.witnesses,
         checklist: prep.checklist.map((q) => q.text),
       });
-      await downloadFile(r.guide_pdf_url, "guide_methodologique.pdf");
+      await downloadPdf(r.guide_pdf_url, "guide_methodologique.pdf");
       toast.success("Guide méthodologique exporté.");
       await reload();
     } catch (e) {

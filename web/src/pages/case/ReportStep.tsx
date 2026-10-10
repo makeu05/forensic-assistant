@@ -4,7 +4,7 @@ import {
 } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/FileDownloadOutlined";
 import ArticleIcon from "@mui/icons-material/ArticleOutlined";
-import { api, downloadFile, FinalReport } from "../../api";
+import { api, downloadPdf, FinalReport } from "../../api";
 import { useAuth } from "../../auth";
 import { formatDateTime, frenchError } from "../../format";
 import { useLoad } from "../../hooks";
@@ -107,7 +107,7 @@ function ReportView({ reports }: { reports: FinalReport[] }) {
             <HashBadge hash={r.sha256} verified={verified} timestamp={r.generated_at} />
             <Typography variant="body2" color="text.secondary">Version {r.version}, générée par {r.generated_by} le {formatDateTime(r.generated_at)}.</Typography>
             {r.pseudonymized && <Chip size="small" label="Noms pseudonymisés" sx={{ alignSelf: "flex-start" }} />}
-            <Button variant="contained" startIcon={<DownloadIcon />} onClick={() => downloadFile(r.pdf_url, `rapport_v${r.version}.pdf`).catch((e) => toast.error(frenchError(e)))}>
+            <Button variant="contained" startIcon={<DownloadIcon />} onClick={() => downloadPdf(r.pdf_url, `rapport_v${r.version}.pdf`).catch((e) => toast.error(frenchError(e)))}>
               Télécharger le rapport (PDF)
             </Button>
           </Card>

@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
+from app.core.files import Encoding, file_answer
 from app.core.latex import LatexError, render_pdf
 from app.db import Base, get_db
 from app.modules.audit.service import log_action, sha256_file
@@ -82,11 +82,11 @@ def contract_for_case(case_id: str, user: User = Depends(current_user), db: Sess
 
 
 @router.get("/{contract_id}/download")
-def download(contract_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def download(contract_id: str, encoding: Encoding = "raw", user: User = Depends(current_user), db: Session = Depends(get_db)):
     c = db.get(Contract, contract_id)
     if not c or not Path(c.pdf_path).is_file():
         raise HTTPException(404, "Contract not found")
     case_for(db, c.case_id, user, "view")
     if sha256_file(c.pdf_path) != c.hash_sha256:
         raise HTTPException(409, "Integrity check failed: stored PDF was modified")
-    return FileResponse(c.pdf_path, media_type="application/pdf", filename="mandat.pdf")
+    return file_answer(c.pdf_path, "application/pdf", "mandat.pdf", encoding)

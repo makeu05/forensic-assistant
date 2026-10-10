@@ -10,11 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, Integer, String, Text, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
+from app.core.files import Encoding, file_answer
 from app.core.latex import LatexError, render_pdf
 from app.db import Base, get_db
 from app.modules.audit.service import AuditLog, log_action, sha256_file, verify_chain
@@ -170,11 +170,11 @@ def list_reports(case_id: str, user: User = Depends(current_user), db: Session =
 
 
 @router.get("/{report_id}/download")
-def download(report_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def download(report_id: str, encoding: Encoding = "raw", user: User = Depends(current_user), db: Session = Depends(get_db)):
     r = db.get(FinalReport, report_id)
     if not r or not Path(r.pdf_path).is_file():
         raise HTTPException(404, "Report not found")
     case_for(db, r.case_id, user, "view")
     if sha256_file(r.pdf_path) != r.sha256:
         raise HTTPException(409, "Integrity check failed: the stored report was modified")
-    return FileResponse(r.pdf_path, media_type="application/pdf", filename=f"rapport_v{r.version}.pdf")
+    return file_answer(r.pdf_path, "application/pdf", f"rapport_v{r.version}.pdf", encoding)

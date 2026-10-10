@@ -2,10 +2,10 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.files import Encoding, file_answer
 from app.core.latex import LatexError, render_pdf
 from app.db import get_db
 from app.modules.audit.service import log_action
@@ -83,9 +83,9 @@ def prepare(body: PrepareIn, user: User = Depends(require_role("investigateur"))
 
 
 @router.get("/{case_id}/guide.pdf")
-def guide(case_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def guide(case_id: str, encoding: Encoding = "raw", user: User = Depends(current_user), db: Session = Depends(get_db)):
     case_for(db, case_id, user, "view")
     pdf = Path(output_dir() / "guides" / case_id / "guide.pdf")
     if not pdf.is_file():
         raise HTTPException(404, "Guide not generated yet")
-    return FileResponse(pdf, media_type="application/pdf", filename="guide.pdf")
+    return file_answer(pdf, "application/pdf", "guide.pdf", encoding)

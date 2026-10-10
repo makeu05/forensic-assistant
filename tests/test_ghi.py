@@ -268,3 +268,45 @@ def test_lifecycle_exposes_solicitation_counts(client, expert_api):
 
 DATASET_CASE = {"case_type": "malware", "description": "Ransomware sur le serveur de fichiers de la société.",
                 "priority": "moyenne", "mandataire": {"nom": "Dupont", "fonction": "juge_instruction"}}
+
+
+# ------------------------------------- files survive download managers (base64 variant)
+
+def test_pdf_endpoints_offer_a_base64_variant_that_matches_the_raw_file(client, chosen_case):
+    import base64
+
+    cid, expert = chosen_case()
+    if shutil.which("pdflatex") is None:
+        pytest.skip("pdflatex not installed")
+    contract = client.post(f"{API}/contracts/generate", json={"case_id": cid}).json()
+    raw = client.get(contract["pdf_url"])
+    assert raw.status_code == 200 and raw.content.startswith(b"%PDF")
+    as_json = client.get(contract["pdf_url"], params={"encoding": "base64"})
+    assert as_json.status_code == 200 and as_json.headers["content-type"].startswith("application/json")
+    assert "content-disposition" not in as_json.headers  # nothing a download manager would grab
+    body = as_json.json()
+    assert body["content_type"] == "application/pdf" and body["filename"] == "mandat.pdf"
+    assert base64.b64decode(body["content_base64"]) == raw.content and body["size"] == len(raw.content)
+
+    guide = expert.post(f"{API}/mission/prepare", json={"case_id": cid}).json()["guide_pdf_url"]
+    assert base64.b64decode(expert.get(guide, params={"encoding": "base64"}).json()["content_base64"]).startswith(b"%PDF")
+    assert client.get(contract["pdf_url"], params={"encoding": "zip"}).status_code == 422  # only raw or base64
+
+
+def test_base64_variant_keeps_the_integrity_check_and_access_rules(client, other_mandataire, chosen_case):
+    cid, _ = chosen_case()
+    if shutil.which("pdflatex") is None:
+        pytest.skip("pdflatex not installed")
+    contract = client.post(f"{API}/contracts/generate", json={"case_id": cid}).json()
+    assert other_mandataire.get(contract["pdf_url"], params={"encoding": "base64"}).status_code == 404
+    path = next((Path(os.environ["OUTPUT_DIR"]) / "contracts").glob("*/mandat.pdf"))
+    for p in (Path(os.environ["OUTPUT_DIR"]) / "contracts").glob("*/mandat.pdf"):
+        if contract["contract_id"] in str(p):
+            path = p
+    original = path.read_bytes()
+    try:
+        path.write_bytes(original + b"\n% tampered")
+        assert client.get(contract["pdf_url"], params={"encoding": "base64"}).status_code == 409  # refused, not served
+    finally:
+        path.write_bytes(original)
+    assert client.get(contract["pdf_url"], params={"encoding": "base64"}).status_code == 200

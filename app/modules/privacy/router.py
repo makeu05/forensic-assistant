@@ -40,4 +40,4 @@ def export_my_data(user: User = Depends(current_user), db: Session = Depends(get
         "note": "Witness statements and other people's data are not part of this export.",
     }
     log_action(db, "RGPD", "export_personal_data", user=user.email)
-    return JSONResponse(data, headers={"Content-Disposition": 'attachment; filename="locard-mes-donnees.json"'})
+    return JSONResponse(data)  # no "attachment" header: download managers would swallow it; the app saves it itself

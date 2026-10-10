@@ -28,7 +28,7 @@ def test_user_can_export_their_own_data(client, other_mandataire):
     mine = client.post(f"{API}/cases", json={"case_type": "malware", "description": "Ransomware sur le serveur de fichiers.",
                                             "priority": "basse", "mandataire": {"nom": "Dupont", "fonction": "juge"}}).json()["case_id"]
     r = client.get(f"{API}/privacy/export")
-    assert r.status_code == 200 and "locard-mes-donnees.json" in r.headers["content-disposition"]
+    assert r.status_code == 200 and "content-disposition" not in r.headers  # not a download as far as download managers see
     data = r.json()
     assert data["account"]["email"] == "juge.dupont@tribunal.test" and data["account"]["role"] == "mandataire"
     assert mine in [c["case_id"] for c in data["cases"]]

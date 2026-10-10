@@ -47,13 +47,34 @@ export async function fetchFile(url: string): Promise<Blob> {
   return response.data;
 }
 
-export async function downloadFile(url: string, filename: string): Promise<void> {
-  const href = URL.createObjectURL(await fetchFile(url));
+function saveBlob(blob: Blob, filename: string): void {
+  const href = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = href;
   link.download = filename;
   link.click();
   URL.revokeObjectURL(href);
+}
+
+export async function downloadFile(url: string, filename: string): Promise<void> {
+  saveBlob(await fetchFile(url), filename);
+}
+
+/**
+ * A protected PDF as a Blob, fetched as base64 inside JSON. Download managers (Internet Download Manager and
+ * the like) swallow anything that looks like a PDF download and hand the page an empty 204, which blanks the
+ * preview and makes "Télécharger" save an empty file. A JSON answer is not a download, so it always arrives.
+ */
+export async function fetchPdf(url: string): Promise<Blob> {
+  const { data } = await http.get<{ content_base64: string; content_type: string }>(
+    url.replace(/^\/api\/v1/, ""), { params: { encoding: "base64" } },
+  );
+  const bytes = Uint8Array.from(atob(data.content_base64), (c) => c.charCodeAt(0));
+  return new Blob([bytes], { type: data.content_type });
+}
+
+export async function downloadPdf(url: string, filename: string): Promise<void> {
+  saveBlob(await fetchPdf(url), filename);
 }
 
 // ------------------------------------------------------------------ types

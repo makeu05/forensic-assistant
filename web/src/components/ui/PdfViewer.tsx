@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Box, Skeleton } from "@mui/material";
-import { fetchFile } from "../../api";
+import { fetchPdf } from "../../api";
 import { frenchError } from "../../format";
 
 interface Props {
@@ -22,10 +22,10 @@ export default function PdfViewer({ url, title, height = 560, onVerified }: Prop
     let objectUrl: string | null = null;
     setSrc(null);
     setError("");
-    fetchFile(url)
+    fetchPdf(url)
       .then((blob) => {
         if (cancelled) return;
-        objectUrl = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+        objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
         onVerified?.(true);
       })

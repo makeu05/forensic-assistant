@@ -148,3 +148,14 @@ State at the end of this session: 76 backend tests, 91% coverage, web build clea
 - **Checks**: `node --experimental-strip-types web/scripts/check-contrast.mjs` (WCAG AA over all token pairs, both modes). Brief colours that failed AA as text got text variants (documented in `tokens.ts`). Browser e2e used puppeteer-core + axe-core in a scratch folder (not in the repo).
 - **Dev accounts** were created on `forensic.db`: mandataire@locard.test and alice.dubois0@experts.example (passwords were shown once in chat, not stored anywhere).
 - **Known gaps**: bundle is one 746 kB chunk (route code-splitting not done); PV upload accepts .txt only; no password reset; no Docker/CI yet; `tooltip` popups trigger an axe "region" notice (portal, known false positive); expert suggestions for witnesses are empty (MVP).
+
+## 11. Update 2026-10-10: deployment prep, mail, README
+
+- **Verified**: whole suite (143 tests, 89% coverage) passes on SQLite and on PostgreSQL 16.8 (`TEST_DATABASE_URL`). `requirements.txt` was incomplete (PyJWT, bcrypt, psycopg were missing) and is now verified in a clean venv.
+- **Deployment files** (`Dockerfile.api`, `Dockerfile.web`, `docker-compose.yml`, `deploy/Caddyfile`, `docs/DEPLOY.md`) are written but **never built**: Docker is not installed on this machine. Target domain: belva.work.gd. Host not chosen yet.
+- **Production switches**: `LOCARD_ENV=production` requires `JWT_SECRET` and hides Swagger; `LOCARD_SEED_DEMO=0` skips the fake experts; `TRUSTED_PROXIES` lets the rate limiter see real client addresses behind Caddy (without it everyone shares one bucket). Real experts: `import-experts` CSV, `remove-demo-experts`.
+- **Mail**: Brevo works (login verified, test mail reached an inbox, not spam). Settings live in the git-ignored `.env`. Reserved domains (`.example`, `.test`) are never sent for real. In the dev database two experts carry real addresses for workflow testing (ids 9 and 17); experts.example addresses are held in `output/outbox`.
+- **Download managers**: Internet Download Manager (installed on this machine) swallows PDF downloads and returns an empty 204, which broke the PDF preview and "Télécharger". All PDF endpoints now accept `?encoding=base64` (JSON); the web app uses it. Raw downloads (curl) still work. The data export no longer sends `Content-Disposition`.
+- **Also added since section 10**: rate limiting + security headers, audit log rotation (gzip + hashed marker), RGPD export and `purge-expired`, Module K `GET /xai/explain`, `docs/ISO27037.md`.
+- **README.md** written, with 10 screenshots in `docs/screenshots` (taken from a real end-to-end run with puppeteer in a scratch folder, not part of the repo).
+- **Still open**: CI (GitHub Actions) and lint (flake8 reported 12 small issues), Cypress tests, Alembic migrations, first real Docker build, Brevo domain authentication (DKIM/SPF) for belva.work.gd, code splitting of the 746 kB bundle.

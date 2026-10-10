@@ -4,7 +4,7 @@ import { Alert, Box, Button, Card, Checkbox, FormControlLabel, LinearProgress, T
 import DownloadIcon from "@mui/icons-material/FileDownloadOutlined";
 import DrawIcon from "@mui/icons-material/DrawOutlined";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdfOutlined";
-import { api, downloadFile } from "../../api";
+import { api, downloadPdf } from "../../api";
 import { useAuth } from "../../auth";
 import { formatDateTime, frenchError } from "../../format";
 import { useLoad } from "../../hooks";
@@ -115,7 +115,7 @@ export default function ContractStep() {
           <Typography variant="body2" color="text.secondary">
             À chaque affichage ou téléchargement, Locard recalcule l'empreinte du fichier et le refuse s'il a été modifié depuis sa génération.
           </Typography>
-          <Button variant="contained" startIcon={<DownloadIcon />} onClick={() => downloadFile(k.pdf_url, "mandat.pdf").catch((e) => toast.error(frenchError(e)))}>
+          <Button variant="contained" startIcon={<DownloadIcon />} onClick={() => downloadPdf(k.pdf_url, "mandat.pdf").catch((e) => toast.error(frenchError(e)))}>
             Télécharger le contrat (PDF)
           </Button>
           <Typography variant="caption" color="text.secondary">Généré le {formatDateTime(k.generated_at)}</Typography>
