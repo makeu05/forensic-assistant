@@ -1,0 +1,442 @@
+{
+ "pairs": {
+  "1": {
+   "contradiction": false,
+   "rules": []
+  },
+  "2": {
+   "contradiction": true,
+   "rules": [
+    "etats_contradictoires"
+   ]
+  },
+  "3": {
+   "contradiction": false,
+   "rules": []
+  },
+  "4": {
+   "contradiction": false,
+   "rules": []
+  },
+  "5": {
+   "contradiction": false,
+   "rules": []
+  },
+  "6": {
+   "contradiction": false,
+   "rules": []
+  },
+  "7": {
+   "contradiction": false,
+   "rules": []
+  },
+  "8": {
+   "contradiction": false,
+   "rules": []
+  },
+  "9": {
+   "contradiction": false,
+   "rules": []
+  },
+  "10": {
+   "contradiction": false,
+   "rules": []
+  },
+  "11": {
+   "contradiction": false,
+   "rules": []
+  },
+  "12": {
+   "contradiction": false,
+   "rules": []
+  },
+  "13": {
+   "contradiction": false,
+   "rules": []
+  },
+  "14": {
+   "contradiction": false,
+   "rules": []
+  },
+  "15": {
+   "contradiction": false,
+   "rules": []
+  },
+  "16": {
+   "contradiction": false,
+   "rules": []
+  },
+  "17": {
+   "contradiction": false,
+   "rules": []
+  },
+  "18": {
+   "contradiction": true,
+   "rules": [
+    "etats_contradictoires"
+   ]
+  },
+  "19": {
+   "contradiction": false,
+   "rules": []
+  },
+  "20": {
+   "contradiction": false,
+   "rules": []
+  },
+  "21": {
+   "contradiction": false,
+   "rules": []
+  },
+  "22": {
+   "contradiction": false,
+   "rules": []
+  },
+  "23": {
+   "contradiction": false,
+   "rules": []
+  },
+  "24": {
+   "contradiction": false,
+   "rules": []
+  },
+  "25": {
+   "contradiction": false,
+   "rules": []
+  },
+  "26": {
+   "contradiction": false,
+   "rules": []
+  },
+  "27": {
+   "contradiction": false,
+   "rules": []
+  },
+  "28": {
+   "contradiction": false,
+   "rules": []
+  },
+  "29": {
+   "contradiction": false,
+   "rules": []
+  },
+  "30": {
+   "contradiction": false,
+   "rules": []
+  },
+  "31": {
+   "contradiction": false,
+   "rules": []
+  },
+  "32": {
+   "contradiction": false,
+   "rules": []
+  },
+  "33": {
+   "contradiction": false,
+   "rules": []
+  },
+  "34": {
+   "contradiction": false,
+   "rules": []
+  },
+  "35": {
+   "contradiction": false,
+   "rules": []
+  },
+  "36": {
+   "contradiction": false,
+   "rules": []
+  },
+  "37": {
+   "contradiction": false,
+   "rules": []
+  },
+  "38": {
+   "contradiction": false,
+   "rules": []
+  },
+  "39": {
+   "contradiction": false,
+   "rules": []
+  },
+  "40": {
+   "contradiction": false,
+   "rules": []
+  },
+  "41": {
+   "contradiction": false,
+   "rules": []
+  },
+  "42": {
+   "contradiction": false,
+   "rules": []
+  },
+  "43": {
+   "contradiction": false,
+   "rules": []
+  },
+  "44": {
+   "contradiction": false,
+   "rules": []
+  },
+  "45": {
+   "contradiction": false,
+   "rules": []
+  },
+  "46": {
+   "contradiction": false,
+   "rules": []
+  },
+  "47": {
+   "contradiction": false,
+   "rules": []
+  },
+  "48": {
+   "contradiction": false,
+   "rules": []
+  },
+  "49": {
+   "contradiction": false,
+   "rules": []
+  },
+  "50": {
+   "contradiction": false,
+   "rules": []
+  },
+  "51": {
+   "contradiction": false,
+   "rules": []
+  },
+  "52": {
+   "contradiction": false,
+   "rules": []
+  },
+  "53": {
+   "contradiction": false,
+   "rules": []
+  },
+  "54": {
+   "contradiction": false,
+   "rules": []
+  },
+  "55": {
+   "contradiction": false,
+   "rules": []
+  },
+  "56": {
+   "contradiction": false,
+   "rules": []
+  },
+  "57": {
+   "contradiction": false,
+   "rules": []
+  },
+  "58": {
+   "contradiction": false,
+   "rules": []
+  },
+  "59": {
+   "contradiction": false,
+   "rules": []
+  },
+  "60": {
+   "contradiction": false,
+   "rules": []
+  },
+  "61": {
+   "contradiction": false,
+   "rules": []
+  },
+  "62": {
+   "contradiction": false,
+   "rules": []
+  },
+  "63": {
+   "contradiction": false,
+   "rules": []
+  },
+  "64": {
+   "contradiction": false,
+   "rules": []
+  },
+  "65": {
+   "contradiction": false,
+   "rules": []
+  },
+  "66": {
+   "contradiction": false,
+   "rules": []
+  },
+  "67": {
+   "contradiction": false,
+   "rules": []
+  },
+  "68": {
+   "contradiction": false,
+   "rules": []
+  },
+  "69": {
+   "contradiction": false,
+   "rules": []
+  },
+  "70": {
+   "contradiction": false,
+   "rules": []
+  },
+  "71": {
+   "contradiction": false,
+   "rules": []
+  },
+  "72": {
+   "contradiction": false,
+   "rules": []
+  },
+  "73": {
+   "contradiction": false,
+   "rules": []
+  },
+  "74": {
+   "contradiction": false,
+   "rules": []
+  },
+  "75": {
+   "contradiction": false,
+   "rules": []
+  },
+  "76": {
+   "contradiction": false,
+   "rules": []
+  },
+  "77": {
+   "contradiction": false,
+   "rules": []
+  },
+  "78": {
+   "contradiction": false,
+   "rules": []
+  },
+  "79": {
+   "contradiction": false,
+   "rules": []
+  },
+  "80": {
+   "contradiction": false,
+   "rules": []
+  },
+  "81": {
+   "contradiction": false,
+   "rules": []
+  },
+  "82": {
+   "contradiction": false,
+   "rules": []
+  },
+  "83": {
+   "contradiction": false,
+   "rules": []
+  },
+  "84": {
+   "contradiction": true,
+   "rules": [
+    "etats_contradictoires"
+   ]
+  },
+  "85": {
+   "contradiction": false,
+   "rules": []
+  },
+  "86": {
+   "contradiction": false,
+   "rules": []
+  },
+  "87": {
+   "contradiction": false,
+   "rules": []
+  },
+  "88": {
+   "contradiction": false,
+   "rules": []
+  },
+  "89": {
+   "contradiction": false,
+   "rules": []
+  },
+  "90": {
+   "contradiction": false,
+   "rules": []
+  },
+  "91": {
+   "contradiction": false,
+   "rules": []
+  },
+  "92": {
+   "contradiction": false,
+   "rules": []
+  },
+  "93": {
+   "contradiction": false,
+   "rules": []
+  },
+  "94": {
+   "contradiction": false,
+   "rules": []
+  },
+  "95": {
+   "contradiction": false,
+   "rules": []
+  },
+  "96": {
+   "contradiction": false,
+   "rules": []
+  },
+  "97": {
+   "contradiction": false,
+   "rules": []
+  },
+  "98": {
+   "contradiction": false,
+   "rules": []
+  },
+  "99": {
+   "contradiction": false,
+   "rules": []
+  },
+  "100": {
+   "contradiction": false,
+   "rules": []
+  }
+ },
+ "pv": {
+  "p1": {
+   "flagged": []
+  },
+  "p2": {
+   "flagged": []
+  },
+  "p3": {
+   "flagged": []
+  },
+  "p4": {
+   "flagged": []
+  },
+  "p5": {
+   "flagged": []
+  },
+  "p6": {
+   "flagged": []
+  },
+  "p7": {
+   "flagged": []
+  },
+  "p8": {
+   "flagged": []
+  },
+  "p9": {
+   "flagged": []
+  },
+  "p10": {
+   "flagged": []
+  }
+ }
+}

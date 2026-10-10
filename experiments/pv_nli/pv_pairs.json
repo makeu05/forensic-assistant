@@ -1,0 +1,141 @@
+{
+  "note": "Ten pairs of witness statements. 'planted' lists the [sentence in a, sentence in b] pairs that truly contradict each other (0-based). Every other cross pair is meant to be compatible. Three pairs are controls with nothing planted. Synthetic, written by hand: it measures false alarms per case, not real-world accuracy.",
+  "pv_pairs": [
+    {"id": "p1", "topic": "virement frauduleux",
+     "a": {"witness": "Pierre Lambert", "sentences": [
+       "Je suis comptable dans l'entreprise depuis neuf ans.",
+       "Le jeudi 9 octobre, j'ai reçu une demande de virement signée par la direction.",
+       "J'ai comparé la signature avec celle du dossier fournisseur.",
+       "Le virement de 48 000 euros est parti le vendredi matin.",
+       "Le bénéficiaire était une société immatriculée à Chypre.",
+       "Je suis la seule personne à avoir accès au portail bancaire."]},
+     "b": {"witness": "Claire Morel", "sentences": [
+       "J'assiste le directeur depuis trois ans.",
+       "La direction n'a émis aucune demande de virement cette semaine-là.",
+       "Mon bureau est situé au troisième étage.",
+       "Tout le service comptable utilise le même identifiant pour le portail bancaire.",
+       "La banque a téléphoné vendredi après-midi, ce qui m'a surprise."]},
+     "planted": [[1, 1], [5, 3]]},
+
+    {"id": "p2", "topic": "intrusion réseau",
+     "a": {"witness": "Julien Faure (administrateur)", "sentences": [
+       "Je suis administrateur système depuis 2019.",
+       "L'alerte de l'antivirus est apparue à 2 h 47 dans la nuit de mardi.",
+       "J'ai isolé le serveur du réseau dès que j'ai vu l'alerte.",
+       "Le pare-feu journalise toutes les connexions entrantes.",
+       "La connexion suspecte provenait d'une adresse située en Roumanie.",
+       "Aucune donnée n'a quitté le réseau."]},
+     "b": {"witness": "Sonia Benali (RSSI)", "sentences": [
+       "Je dirige la sécurité des systèmes d'information.",
+       "L'analyse du trafic montre l'envoi de plus de trois gigaoctets vers l'extérieur.",
+       "Le serveur n'a été déconnecté du réseau que mercredi à midi.",
+       "Notre prestataire a renouvelé les certificats la semaine précédente.",
+       "Le mot de passe de l'administrateur avait plus de deux ans."]},
+     "planted": [[5, 1], [2, 2]]},
+
+    {"id": "p3", "topic": "logiciel malveillant",
+     "a": {"witness": "Nadia Fofana", "sentences": [
+       "Je travaille au service marketing.",
+       "J'ai reçu un e-mail de livraison lundi matin vers neuf heures.",
+       "Je n'ai cliqué sur aucun lien contenu dans ce message.",
+       "Mon ordinateur a commencé à ralentir dans l'après-midi.",
+       "Mon collègue de bureau a signalé le même ralentissement."]},
+     "b": {"witness": "Olivier Garnier (support)", "sentences": [
+       "Le support informatique a été appelé lundi vers quinze heures.",
+       "Les journaux montrent que le lien de l'e-mail a été ouvert depuis le poste du marketing à 9 h 12.",
+       "Le logiciel malveillant a été téléchargé depuis un site hébergé en Asie.",
+       "Le serveur de messagerie a été mis à jour le mois dernier."]},
+     "planted": [[2, 1]]},
+
+    {"id": "p4", "topic": "accès physique",
+     "a": {"witness": "Karim Benali (gardien)", "sentences": [
+       "Je suis agent de sécurité de nuit depuis cinq ans.",
+       "J'ai fait ma ronde à minuit et la salle serveur était verrouillée.",
+       "Aucun visiteur n'est entré dans le bâtiment après vingt heures.",
+       "Le registre d'accès est rempli à la main à chaque entrée."]},
+     "b": {"witness": "Lucie Faure (responsable des locaux)", "sentences": [
+       "Je gère les locaux techniques.",
+       "Un prestataire de climatisation est venu vers vingt-deux heures pour une urgence.",
+       "Le registre d'accès n'est pas tenu depuis le mois dernier.",
+       "La salle serveur est équipée d'un lecteur de badge."]},
+     "planted": [[2, 1], [3, 2]]},
+
+    {"id": "p5", "topic": "débit inhabituel (contrôle)",
+     "a": {"witness": "Hana Nguyen", "sentences": [
+       "J'ai constaté un débit inhabituel sur le compte lundi matin.",
+       "Le débit correspondait à un virement de 22 000 euros.",
+       "J'ai immédiatement prévenu le responsable financier.",
+       "La banque m'a confirmé l'opération par téléphone."]},
+     "b": {"witness": "Samuel Roux", "sentences": [
+       "Le responsable financier a été prévenu lundi vers dix heures.",
+       "Il a demandé le blocage du compte à la banque.",
+       "Un rapport d'incident a été rédigé le jour même.",
+       "L'opération avait été initiée depuis un poste du service comptable."]},
+     "planted": []},
+
+    {"id": "p6", "topic": "serveur de test (contrôle)",
+     "a": {"witness": "Paul Mbarga", "sentences": [
+       "Je suis développeur dans l'équipe applicative.",
+       "Le serveur de test a été redémarré mercredi dans l'après-midi.",
+       "Je n'ai pas modifié la configuration du pare-feu.",
+       "J'ai remarqué des tentatives de connexion échouées dans les journaux."]},
+     "b": {"witness": "Diane Leroy", "sentences": [
+       "L'équipe réseau a modifié la configuration du pare-feu en septembre.",
+       "Le serveur de test est hébergé dans le centre de données de Lille.",
+       "Les tentatives de connexion échouées provenaient de plusieurs adresses.",
+       "Un audit externe est prévu le mois prochain."]},
+     "planted": []},
+
+    {"id": "p7", "topic": "ancien salarié",
+     "a": {"witness": "Emile Dubois (directeur)", "sentences": [
+       "J'ai licencié M. Perrin le vingt septembre.",
+       "Son accès au système a été supprimé le jour même.",
+       "Il a rendu son ordinateur portable ce jour-là.",
+       "Je n'ai eu aucun contact avec lui depuis."]},
+     "b": {"witness": "Ivan Martin (administrateur)", "sentences": [
+       "Le compte de M. Perrin a été utilisé jusqu'au quinze octobre.",
+       "Les droits de M. Perrin n'ont jamais été retirés.",
+       "Son ordinateur portable n'a jamais été restitué à l'entreprise.",
+       "Le service RH ne m'a transmis aucune demande de suppression de compte."]},
+     "planted": [[1, 0], [1, 1], [2, 2]]},
+
+    {"id": "p8", "topic": "virement frauduleux (cliente et banque)",
+     "a": {"witness": "Mme Girard (cliente)", "sentences": [
+       "Je suis cliente de la banque depuis dix ans.",
+       "J'ai reçu un SMS de confirmation pour chaque opération.",
+       "Le virement frauduleux était de 12 000 euros.",
+       "J'étais en voyage à Madrid quand l'opération a eu lieu."]},
+     "b": {"witness": "M. Lopez (banque)", "sentences": [
+       "Le conseiller de la clientèle a vérifié le dossier mardi.",
+       "Le virement frauduleux atteignait 120 000 euros.",
+       "La cliente n'a reçu aucun SMS de confirmation, le service était désactivé sur son compte.",
+       "L'opération a été validée depuis une adresse IP en France."]},
+     "planted": [[2, 1], [1, 2]]},
+
+    {"id": "p9", "topic": "rançongiciel (contrôle)",
+     "a": {"witness": "Quentin Martin", "sentences": [
+       "Mon poste affichait un message de rançon mercredi à huit heures.",
+       "J'ai éteint l'ordinateur immédiatement.",
+       "J'ai appelé le support informatique.",
+       "Je n'avais pas de fichier personnel sur ce poste."]},
+     "b": {"witness": "Rose Leroy", "sentences": [
+       "Le support informatique a reçu un appel mercredi vers huit heures dix.",
+       "Le poste a été retiré du réseau et envoyé en analyse.",
+       "Les sauvegardes de la veille étaient saines.",
+       "Le message de rançon réclamait un paiement en cryptomonnaie."]},
+     "planted": []},
+
+    {"id": "p10", "topic": "vol dans un coffre",
+     "a": {"witness": "Le suspect", "sentences": [
+       "Le soir du vol, j'ai quitté le bureau à dix-sept heures.",
+       "Je suis rentré directement chez moi en métro.",
+       "Je n'ai pas touché au coffre du service.",
+       "Je n'ai jamais eu les clés de la salle des archives."]},
+     "b": {"witness": "Une collègue", "sentences": [
+       "J'ai croisé le suspect devant le coffre vers vingt-et-une heures.",
+       "Il détenait un double des clés de la salle des archives.",
+       "Le coffre a été ouvert avec la clé principale.",
+       "Les caméras du rez-de-chaussée étaient en maintenance ce soir-là."]},
+     "planted": [[0, 0], [3, 1]]}
+  ]
+}
